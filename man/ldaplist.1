@@ -66,9 +66,12 @@ Search ou=Groups.
 .TP
 .B -u
 Search ou=automount.
+.TP
+.B -y
+Search ou=policies and display common OpenLDAP ppolicy and Active Directory fine-grained password-policy attributes. Does not calculate effective policy for an individual user.
 .SH AUTHENTICATION
 For Kerberos, acquire a ticket with kinit and use -a kerberos. Simple binds should use LDAPS and trusted CA validation.
 .SH ENVIRONMENT
-LDAPURI, LDAPLIST_BASE_DN, LDAPLIST_DOMAIN, LDAPLIST_PEOPLE_OU, LDAPLIST_SUDOERS_OU, LDAPLIST_GROUPS_OU, LDAPLIST_AUTOMOUNT_OU.
+LDAPURI, LDAPLIST_BASE_DN, LDAPLIST_DOMAIN, LDAPLIST_PEOPLE_OU, LDAPLIST_SUDOERS_OU, LDAPLIST_GROUPS_OU, LDAPLIST_AUTOMOUNT_OU, LDAPLIST_POLICIES_OU.
 .SH LICENSE
 GNU General Public License version 2 only (GPL-2.0-only).
