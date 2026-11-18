@@ -69,7 +69,7 @@ Use LDAPS and a trusted CA for simple binds. Do not use `-w` on shared systems: 
 ## Examples
 
 ```bash
-ldaplist -h ldap.example.com -M example.com -a kerberos -p -t
+ldaplist -h ldap.example.com -M example.com -p -t
 ldaplist -h ldap.example.com -M example.com -s
 ldaplist -h ldap.example.com -M example.com -g
 ldaplist -h ldap.example.com -M example.com -u
