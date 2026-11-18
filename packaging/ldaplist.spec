@@ -5,7 +5,7 @@ Summary:        LDAP directory listing utility for OpenLDAP and Active Directory
 License:        GPL-2.0-only
 URL:            https://github.com/azwieg103/ldaplist
 Source0:        %{name}-%{version}.tar.gz
-BuildRequires:  gcc, make, openldap-devel, cyrus-sasl-devel, krb5-devel, pkgconf-pkg-config
+BuildRequires:  gcc, make, openldap-devel, cyrus-sasl-devel, cyrus-sasl-gssapi, krb5-devel, pkgconf-pkg-config
 Requires:       openldap, cyrus-sasl-lib, cyrus-sasl-gssapi, krb5-libs
 %description
 A C-based LDAP listing utility for OpenLDAP and Microsoft Active Directory,
