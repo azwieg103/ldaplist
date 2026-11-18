@@ -1,6 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
 #include <ldap.h>
-#include <ldap_log.h>
 #include <sys/time.h>
 #include <sasl/sasl.h>
 #include <stdio.h>
