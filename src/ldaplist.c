@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 #include <ldap.h>
 #include <sys/time.h>
 #include <sasl/sasl.h>
@@ -15,7 +16,7 @@
 #define VERSION "1.0.0"
 typedef struct { const char *host,*domain,*profile,*auth,*cert,*dn,*pw,*pwfile,*base; int port,debug,verbose,table,p,s,g,u,y; } Opt;
 static void usage(FILE *f) {
- fprintf(f,"ldaplist %s\nUsage: ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword|-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]\n\n-d debug  -l classic output  -v verbose  -h server[:port]  -M domain/base DN\n-N profile  -a simple|kerberos|gssapi|anonymous  -P CA file/dir  -D bind DN\n-w password  -j password file  -t People table  -p People  -s SUDOers  -g Groups  -u automount  -y password policies\n-V version  -? help\n",VERSION);
+ fprintf(f,"ldaplist %s\nUsage: ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword|-W|-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]\n\n-d debug  -l classic output  -v verbose  -h server[:port]  -M domain/base DN\n-N profile  -a simple|kerberos|gssapi|anonymous  -P CA file/dir  -D bind DN\n-w password  -W prompt for password  -j password file  -t People table  -p People  -s SUDOers  -g Groups  -u automount  -y password policies\n-V version  -? help\n",VERSION);
 }
 static char *trim(char *s){while(isspace((unsigned char)*s))s++;char *e=s+strlen(s);while(e>s&&isspace((unsigned char)e[-1]))*--e=0;return s;}
 static void domain_dn(const char *d,char *out,size_t n){
@@ -48,12 +49,22 @@ static void esc_filter(const char *in,char *out,size_t n){
  size_t j=0;for(size_t i=0;in[i]&&j+4<n;i++){unsigned char c=(unsigned char)in[i];if(c=='*'||c=='('||c==')'||c=='\\'||c==0){int z=snprintf(out+j,n-j,"\\%02x",c);if(z<0)break;j+=(size_t)z;}else out[j++]=(char)c;}out[j]=0;
 }
 int main(int argc,char **argv){
- Opt o={.port=389,.auth="simple"};int c;
- while((c=getopt(argc,argv,"dlvh:M:N:a:P:D:w:j:tpsguyV?"))!=-1)switch(c){
- case 'd':o.debug=1;break;case 'l':break;case 'v':o.verbose=1;break;case 'h':o.host=optarg;break;case 'M':o.domain=optarg;break;case 'N':o.profile=optarg;break;case 'a':o.auth=optarg;break;case 'P':o.cert=optarg;break;case 'D':o.dn=optarg;break;case 'w':o.pw=optarg;break;case 'j':o.pwfile=optarg;break;case 't':o.table=1;break;case 'p':o.p=1;break;case 's':o.s=1;break;case 'g':o.g=1;break;case 'u':o.u=1;break;case 'y':o.y=1;break;case 'V':puts("ldaplist " VERSION);return 0;default:usage(c=='?'?stdout:stderr);return c=='?'?0:2;}
+ Opt o={.port=389,.auth="kerberos"};int c,auth_explicit=0,prompt_pw=0,pw_owned=0;
+ while((c=getopt(argc,argv,"dlvh:M:N:a:P:D:w:Wj:tpsguyV?"))!=-1)switch(c){
+ case 'd':o.debug=1;break;case 'l':break;case 'v':o.verbose=1;break;case 'h':o.host=optarg;break;case 'M':o.domain=optarg;break;case 'N':o.profile=optarg;break;case 'a':o.auth=optarg;auth_explicit=1;break;case 'P':o.cert=optarg;break;case 'D':o.dn=optarg;break;case 'w':o.pw=optarg;break;case 'W':prompt_pw=1;break;case 'j':o.pwfile=optarg;break;case 't':o.table=1;break;case 'p':o.p=1;break;case 's':o.s=1;break;case 'g':o.g=1;break;case 'u':o.u=1;break;case 'y':o.y=1;break;case 'V':puts("ldaplist " VERSION);return 0;default:usage(c=='?'?stdout:stderr);return c=='?'?0:2;}
  profile(o.profile,&o);
+ if(prompt_pw){
+  if(auth_explicit && strcasecmp(o.auth,"simple") && strcasecmp(o.auth,"bind")){
+   fputs("ldaplist: -W cannot be combined with a non-simple -a method\n",stderr);return 2;
+  }
+  char *entered=getpass("LDAP password: ");
+  if(!entered){fputs("ldaplist: unable to read password\n",stderr);return 2;}
+  o.pw=strdup(entered);if(!o.pw){fputs("ldaplist: out of memory\n",stderr);return 2;}pw_owned=1;
+  if(!auth_explicit)o.auth="simple";
+ }
  if(o.pwfile){FILE *f=fopen(o.pwfile,"r");if(!f){perror("password file");return 2;}char *line=NULL;size_t n=0;if(getline(&line,&n,f)<0){fclose(f);free(line);return 2;}fclose(f);line[strcspn(line,"\r\n")]=0;o.pw=line;}
- if(o.pw&&!o.dn){fputs("ldaplist: -w/-j requires -D\n",stderr);return 2;}
+ if((o.pw||o.pwfile)&&!auth_explicit)o.auth="simple";
+ if(o.pw&&!o.dn){fputs("ldaplist: -w/-W/-j requires -D\n",stderr);return 2;}
  char uri[1024],host[768];const char *envuri=getenv("LDAPURI");
  if(o.host){snprintf(host,sizeof(host),"%s",o.host);char *colon=strrchr(host,':');if(colon&&strchr(host,']')==NULL){*colon++=0;o.port=atoi(colon);}snprintf(uri,sizeof(uri),"%s://%s:%d",o.port==636?"ldaps":"ldap",host,o.port);}
  else snprintf(uri,sizeof(uri),"%s",envuri&&*envuri?envuri:"ldap://localhost:389");
@@ -86,5 +97,5 @@ int main(int argc,char **argv){
  char dn[2300],filter[8192];snprintf(dn,sizeof(dn),"%s,%s",ou,base);
  if(optind<argc){size_t used=(size_t)snprintf(filter,sizeof(filter),"(|");for(;optind<argc;optind++){char x[2048];esc_filter(argv[optind],x,sizeof(x));int z=snprintf(filter+used,sizeof(filter)-used,"(%s=%s)",a,x);if(z>0&&(size_t)z<sizeof(filter)-used)used+=(size_t)z;}snprintf(filter+used,sizeof(filter)-used,")");}else snprintf(filter,sizeof(filter),"(objectClass=*)");
  LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)puts("uid\tfirstname\tlastname\tmail\tmobile");for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,k,o.table);ldap_msgfree(res);}}
- ldap_unbind_ext_s(ld,NULL,NULL);if(o.pwfile&&o.pw){memset((char*)o.pw,0,strlen(o.pw));free((char*)o.pw);}return err?1:0;
+ ldap_unbind_ext_s(ld,NULL,NULL);if((o.pwfile||pw_owned)&&o.pw){memset((char*)o.pw,0,strlen(o.pw));free((char*)o.pw);}return err?1:0;
 }
