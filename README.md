@@ -7,7 +7,7 @@ A C-based open-source LDAP listing utility for Linux. This project implements a 
 ## Features
 - C implementation using OpenLDAP `libldap` (no shelling out to ldapsearch).
 - LDAPv3; LDAP and LDAPS URIs.
-- Simple LDAP bind and Kerberos/GSSAPI SASL authentication using the workstation credential cache.
+- Kerberos/GSSAPI SSO by default, using the workstation credential cache; simple bind remains available with `-W`, `-w`, or `-j`.
 - Password file support (`-j`); prefer it over `-w`.
 - Independent OU selectors: People, SUDOers, Groups, automount.
 - Classic passwd-style People output and tab-separated user table.
@@ -16,7 +16,7 @@ A C-based open-source LDAP listing utility for Linux. This project implements a 
 ## Syntax
 
 ```text
-ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword] [-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]
+ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword] [-W] [-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]
 ```
 
 | Option | Meaning |
@@ -27,10 +27,11 @@ ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [
 | `-h` | LDAP host, optionally with port; 636 selects LDAPS |
 | `-M` | DNS domain (converted to a base DN) or explicit base DN |
 | `-N` | Named profile in `/etc/ldaplist/profiles/NAME.conf` |
-| `-a` | `simple`, `bind`, `anonymous`, `kerberos`, or `gssapi` |
+| `-a` | `kerberos` (default), `simple`, `bind`, `anonymous`, or `gssapi` |
 | `-P` | CA certificate file or directory; verification is required |
 | `-D` | Bind DN |
 | `-w` | Bind password (visible in process arguments; avoid when possible) |
+| `-W` | Prompt for a bind password without echoing it; selects simple bind unless `-a` was explicitly supplied |
 | `-j` | Read password from first line of a file |
 | `-t` | Tab-separated People table |
 | `-p` | Search `ou=People` |
@@ -48,20 +49,19 @@ Use the workstation's existing Kerberos credentials:
 ```bash
 kinit user@EXAMPLE.COM
 klist
-ldaplist -h ldap.example.com -M example.com -a kerberos -p
+ldaplist -h ldap.example.com -M example.com -p
 ldaplist -h ldap.example.com -M example.com -a gssapi -p -t
 ```
 
-The client uses SASL GSSAPI and the current credential cache. The LDAP server must support GSSAPI. DNS, time synchronization, realm configuration, and service principals must be correct.
+Kerberos/GSSAPI is the default authentication method. The client uses SASL GSSAPI and the current credential cache, so no password prompt or `-a kerberos` is needed. The LDAP server must support GSSAPI. Use `-a simple -D 'bind DN' -W` for an interactive, no-echo password prompt. Supplying `-D` with `-W`, `-w`, or `-j` selects simple bind automatically unless `-a` was explicitly set. DNS, time synchronization, realm configuration, and service principals must be correct.
 
 ## Simple bind
 
 ```bash
 install -m 0600 /dev/null "$HOME/.ldaplist.pass"
 # Add the password securely with an editor.
-ldaplist -h dc1.example.com:636 -M example.com -a simple \
-  -D 'CN=LDAP Reader,OU=Service Accounts,DC=example,DC=com' \
-  -j "$HOME/.ldaplist.pass" -p
+ldaplist -h dc1.example.com:636 -M example.com \
+  -D 'CN=LDAP Reader,OU=Service Accounts,DC=example,DC=com' -W -p
 ```
 
 Use LDAPS and a trusted CA for simple binds. Do not use `-w` on shared systems: command-line arguments may be visible through process inspection and shell history.
@@ -70,12 +70,12 @@ Use LDAPS and a trusted CA for simple binds. Do not use `-w` on shared systems: 
 
 ```bash
 ldaplist -h ldap.example.com -M example.com -a kerberos -p -t
-ldaplist -h ldap.example.com -M example.com -a kerberos -s
-ldaplist -h ldap.example.com -M example.com -a kerberos -g
-ldaplist -h ldap.example.com -M example.com -a kerberos -u
-ldaplist -h ldap.example.com -M example.com -a kerberos passwd jdoe
-ldaplist -h ldap.example.com -M example.com -a kerberos groups engineering
-ldaplist -h ldap.example.com -M example.com -a kerberos -p -s -g -u
+ldaplist -h ldap.example.com -M example.com -s
+ldaplist -h ldap.example.com -M example.com -g
+ldaplist -h ldap.example.com -M example.com -u
+ldaplist -h ldap.example.com -M example.com passwd jdoe
+ldaplist -h ldap.example.com -M example.com groups engineering
+ldaplist -h ldap.example.com -M example.com -p -s -g -u
 ```
 
 ## OU and schema configuration
