@@ -62,7 +62,7 @@ int main(int argc,char **argv){
  if(o.cert){if(access(o.cert,R_OK)){perror("CA certificate path");return 2;}setenv(strstr(o.cert,".pem")||strstr(o.cert,".crt")?"LDAPTLS_CACERT":"LDAPTLS_CACERTDIR",o.cert,1);setenv("LDAPTLS_REQCERT","demand",1);}
  LDAP *ld=NULL;int rc=ldap_initialize(&ld,uri);if(rc!=LDAP_SUCCESS){fprintf(stderr,"%s\n",ldap_err2string(rc));return 1;}
  int ver=LDAP_VERSION3;ldap_set_option(ld,LDAP_OPT_PROTOCOL_VERSION,&ver);ldap_set_option(ld,LDAP_OPT_REFERRALS,LDAP_OPT_OFF);struct timeval tv={10,0};ldap_set_option(ld,LDAP_OPT_NETWORK_TIMEOUT,&tv);
- if(o.debug){int on=LDAP_DEBUG_ANY;ldap_set_option(NULL,LDAP_OPT_DEBUG_LEVEL,&on);}
+ if(o.debug){int on=LDAP_DEBUG_TRACE;ldap_set_option(NULL,LDAP_OPT_DEBUG_LEVEL,&on);}
  if(!strcasecmp(o.auth,"kerberos")||!strcasecmp(o.auth,"gssapi"))rc=ldap_sasl_interactive_bind_s(ld,NULL,"GSSAPI",NULL,NULL,LDAP_SASL_QUIET,interact,NULL);
  else if(!strcasecmp(o.auth,"anonymous"))rc=ldap_sasl_bind_s(ld,NULL,LDAP_SASL_SIMPLE,NULL,NULL,NULL,NULL);
  else if(!strcasecmp(o.auth,"simple")||!strcasecmp(o.auth,"bind")){struct berval cred={o.pw?strlen(o.pw):0,o.pw?(char*)o.pw:""};rc=ldap_sasl_bind_s(ld,o.dn,LDAP_SASL_SIMPLE,&cred,NULL,NULL,NULL);}
