@@ -76,7 +76,7 @@ int main(int argc,char **argv){
  if(kinds[i]==4){
   char *entrydn=ldap_get_dn(ld,e);puts(entrydn?entrydn:"");if(entrydn)ldap_memfree(entrydn);
   const char *attrs[]={"cn","pwdAttribute","pwdMinAge","pwdMaxAge","pwdInHistory","pwdCheckQuality","pwdMinLength","pwdExpireWarning","pwdGraceAuthNLimit","pwdLockout","pwdLockoutDuration","pwdMaxFailure","pwdFailureCountInterval","pwdMustChange","pwdAllowUserChange","pwdSafeModify","msDS-PasswordSettingsPrecedence","msDS-PasswordReversibleEncryptionEnabled","msDS-PasswordHistoryLength","msDS-PasswordComplexityEnabled","msDS-MinimumPasswordLength","msDS-MinimumPasswordAge","msDS-MaximumPasswordAge","msDS-LockoutThreshold","msDS-LockoutDuration","msDS-LockoutObservationWindow",NULL};
-  for(int ai=0;attrs[ai];ai++){char *v=attr(ld,e,attrs[ai]);if(*v)printf("  %s: %s\\n",attrs[ai],v);free(v);}
+  for(int ai=0;attrs[ai];ai++){char *v=attr(ld,e,attrs[ai]);if(*v)printf("  %s: %s\n",attrs[ai],v);free(v);}
  }else print_entry(ld,e,kinds[i],o.table);
  }ldap_msgfree(res);}
  if(!selected){if(optind>=argc){usage(stderr);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}const char *db=argv[optind++];int k=-1;const char *ou=NULL,*a="cn";
