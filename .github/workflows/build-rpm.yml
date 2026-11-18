@@ -1,0 +1,100 @@
+name: Build and Publish AlmaLinux 10 RPM
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["src/**", "man/**", "packaging/**", "scripts/**", "Makefile", "LICENSE", ".github/workflows/build-rpm.yml"]
+concurrency:
+  group: ldaplist-rpm-build
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: almalinux:10
+    outputs:
+      current: ${{ steps.fresh.outputs.current }}
+      rpmver: ${{ steps.meta.outputs.rpmver }}
+    steps:
+      - name: Install requirements
+        run: |
+          dnf -y install gcc make rpm-build tar gzip findutils openldap-devel cyrus-sasl-devel cyrus-sasl-gssapi krb5-devel pkgconf-pkg-config python3
+          dnf clean all
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select next ZWIEGNET release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re,urllib.request
+          v=re.search(r'^#define VERSION "([^"]+)"',open("src/ldaplist.c").read(),re.M).group(1)
+          prefix=f"ldaplist-{v}-ZWIEGNET."
+          maxn=0
+          page=1
+          while True:
+              u=f"https://api.github.com/repos/${{ github.repository }}/releases?per_page=100&page={page}"
+              q=urllib.request.Request(u,headers={"Authorization":f"Bearer {os.environ['GH_TOKEN']}","Accept":"application/vnd.github+json"})
+              with urllib.request.urlopen(q) as r: data=json.load(r)
+              for x in data:
+                  m=re.fullmatch(r"([1-9][0-9]*)\.el10",x.get("tag_name","")[len(prefix):]) if x.get("tag_name","").startswith(prefix) else None
+                  if m: maxn=max(maxn,int(m.group(1)))
+              if len(data)<100: break
+              page+=1
+          value=f"ZWIEGNET.{maxn+1}.el10"
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:f.write(f"release={value}\n")
+          print(v,value)
+          PY
+      - name: Build and test
+        run: chmod +x scripts/build-rpm.sh && ./scripts/build-rpm.sh
+        env:
+          RPM_RELEASE: ${{ steps.rel.outputs.release }}
+      - name: Check main is still at this commit
+        id: fresh
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const r=await github.rest.git.getRef({owner:context.repo.owner,repo:context.repo.repo,ref:"heads/main"});
+            const ok=r.data.object.sha===context.sha;
+            core.setOutput("current",String(ok));
+      - name: Read RPM metadata
+        if: steps.fresh.outputs.current == 'true'
+        id: meta
+        run: |
+          f=$(find dist -maxdepth 1 -name 'ldaplist-*.el10.x86_64.rpm' ! -name '*debuginfo*' | head -n1)
+          test -n "$f"
+          v=$(rpm -qp --qf '%{VERSION}-%{RELEASE}' "$f")
+          echo "rpmver=$v" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: success() && steps.fresh.outputs.current == 'true'
+        with:
+          name: ldaplist-almalinux-10-x86_64
+          path: dist/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    needs: build
+    if: needs.build.outputs.current == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ldaplist-almalinux-10-x86_64
+          path: dist
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          RPMVER: ${{ needs.build.outputs.rpmver }}
+        run: |
+          set -euo pipefail
+          tag="ldaplist-$RPMVER"
+          gh release create "$tag" dist/*.rpm --target "$GITHUB_SHA" --title "ldaplist $RPMVER (Enterprise Linux 10)" --notes "C LDAP listing utility for AlmaLinux 10 / Enterprise Linux 10 x86_64. Includes binary and source RPMs. Built and smoke-tested on AlmaLinux 10; supplied as-is without warranty or support." --latest

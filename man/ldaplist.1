@@ -1,0 +1,74 @@
+.TH LDAPLIST 1 "November 2026" "ldaplist 1.0.0" "User Commands"
+.SH NAME
+ldaplist \- list entries from OpenLDAP and Active Directory
+.SH SYNOPSIS
+.B ldaplist
+.RB [ \-dlv ]
+.RB [ \-h server[:port] ]
+.RB [ \-M domainName ]
+.RB [ \-N profileName ]
+.RB [ \-a authenticationMethod ]
+.RB [ \-P certifPath ]
+.RB [ \-D bindDN ]
+.RB [ \-w bindPassword ]
+.RB [ \-j passwdFile ]
+.RB [ \-t ]
+.RB [ \-p | \-s | \-g | \-u ]
+.RI [ database [ key ...]]
+.SH DESCRIPTION
+A read-only LDAP directory listing utility written in C. Supports LDAPv3, OpenLDAP, Active Directory, simple binds, and Kerberos/GSSAPI.
+.SH OPTIONS
+.TP
+.B -d
+Enable LDAP library diagnostics.
+.TP
+.B -l
+Classic output (default).
+.TP
+.B -v
+Verbose connection diagnostics.
+.TP
+.BI -h " server[:port]"
+LDAP server. Port 636 selects LDAPS.
+.TP
+.BI -M " domainName"
+DNS domain converted to a base DN, or an explicit base DN.
+.TP
+.BI -N " profileName"
+Read /etc/ldaplist/profiles/NAME.conf.
+.TP
+.BI -a " method"
+simple, bind, anonymous, kerberos, or gssapi.
+.TP
+.BI -P " certifPath"
+CA certificate file or directory.
+.TP
+.BI -D " bindDN"
+Simple-bind DN.
+.TP
+.BI -w " bindPassword"
+Password argument; prefer -j.
+.TP
+.BI -j " passwdFile"
+Read first line of password file.
+.TP
+.B -t
+Tab-separated People columns: uid, firstname, lastname, mail, mobile.
+.TP
+.B -p
+Search ou=People.
+.TP
+.B -s
+Search ou=SUDOers.
+.TP
+.B -g
+Search ou=Groups.
+.TP
+.B -u
+Search ou=automount.
+.SH AUTHENTICATION
+For Kerberos, acquire a ticket with kinit and use -a kerberos. Simple binds should use LDAPS and trusted CA validation.
+.SH ENVIRONMENT
+LDAPURI, LDAPLIST_BASE_DN, LDAPLIST_DOMAIN, LDAPLIST_PEOPLE_OU, LDAPLIST_SUDOERS_OU, LDAPLIST_GROUPS_OU, LDAPLIST_AUTOMOUNT_OU.
+.SH LICENSE
+MIT.
