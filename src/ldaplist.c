@@ -64,7 +64,7 @@ int main(int argc,char **argv){
  if(o.debug){int on=LDAP_DEBUG_ANY;ldap_set_option(NULL,LDAP_OPT_DEBUG_LEVEL,&on);}
  if(!strcasecmp(o.auth,"kerberos")||!strcasecmp(o.auth,"gssapi"))rc=ldap_sasl_interactive_bind_s(ld,NULL,"GSSAPI",NULL,NULL,LDAP_SASL_QUIET,interact,NULL);
  else if(!strcasecmp(o.auth,"anonymous"))rc=ldap_sasl_bind_s(ld,NULL,LDAP_SASL_SIMPLE,NULL,NULL,NULL,NULL);
- else if(!strcasecmp(o.auth,"simple")||!strcasecmp(o.auth,"bind")){struct berval cred={o.pw?(char*)o.pw:"",o.pw?strlen(o.pw):0};rc=ldap_sasl_bind_s(ld,o.dn,LDAP_SASL_SIMPLE,&cred,NULL,NULL,NULL);}
+ else if(!strcasecmp(o.auth,"simple")||!strcasecmp(o.auth,"bind")){struct berval cred={o.pw?strlen(o.pw):0,o.pw?(char*)o.pw:""};rc=ldap_sasl_bind_s(ld,o.dn,LDAP_SASL_SIMPLE,&cred,NULL,NULL,NULL);}
  else {fprintf(stderr,"unsupported auth method: %s\n",o.auth);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"LDAP authentication failed: %s\n",ldap_err2string(rc));ldap_unbind_ext_s(ld,NULL,NULL);return 1;}
  if(o.verbose)fprintf(stderr,"Connected to %s; base DN %s; auth %s\n",uri,base,o.auth);
