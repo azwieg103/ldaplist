@@ -119,4 +119,4 @@ Primary target: AlmaLinux 10 x86_64. Intended EL10 compatibility includes RHEL, 
 - The utility performs LDAP searches only; it does not modify directory data.
 
 ## License
-MIT. See [LICENSE](LICENSE).
+GNU General Public License version 2 only (GPL-2.0-only). See [LICENSE](LICENSE).
