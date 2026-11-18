@@ -16,7 +16,7 @@ A C-based open-source LDAP listing utility for Linux. This project implements a 
 ## Syntax
 
 ```text
-ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword] [-j passwdFile] [-t] [-p|-s|-g|-u] [database [key]...]
+ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword] [-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]
 ```
 
 | Option | Meaning |
