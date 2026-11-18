@@ -12,9 +12,9 @@
 #include <limits.h>
 
 #define VERSION "1.0.0"
-typedef struct { const char *host,*domain,*profile,*auth,*cert,*dn,*pw,*pwfile,*base; int port,debug,verbose,table,p,s,g,u; } Opt;
+typedef struct { const char *host,*domain,*profile,*auth,*cert,*dn,*pw,*pwfile,*base; int port,debug,verbose,table,p,s,g,u,y; } Opt;
 static void usage(FILE *f) {
- fprintf(f,"ldaplist %s\nUsage: ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword|-j passwdFile] [-t] [-p|-s|-g|-u] [database [key]...]\n\n-d debug  -l classic output  -v verbose  -h server[:port]  -M domain/base DN\n-N profile  -a simple|kerberos|gssapi|anonymous  -P CA file/dir  -D bind DN\n-w password  -j password file  -t People table  -p People  -s SUDOers  -g Groups  -u automount\n-V version  -? help\n",VERSION);
+ fprintf(f,"ldaplist %s\nUsage: ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword|-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]\n\n-d debug  -l classic output  -v verbose  -h server[:port]  -M domain/base DN\n-N profile  -a simple|kerberos|gssapi|anonymous  -P CA file/dir  -D bind DN\n-w password  -j password file  -t People table  -p People  -s SUDOers  -g Groups  -u automount  -y password policies\n-V version  -? help\n",VERSION);
 }
 static char *trim(char *s){while(isspace((unsigned char)*s))s++;char *e=s+strlen(s);while(e>s&&isspace((unsigned char)e[-1]))*--e=0;return s;}
 static void domain_dn(const char *d,char *out,size_t n){
@@ -48,8 +48,8 @@ static void esc_filter(const char *in,char *out,size_t n){
 }
 int main(int argc,char **argv){
  Opt o={.port=389,.auth="simple"};int c;
- while((c=getopt(argc,argv,"dlvh:M:N:a:P:D:w:j:tpsguV?"))!=-1)switch(c){
- case 'd':o.debug=1;break;case 'l':break;case 'v':o.verbose=1;break;case 'h':o.host=optarg;break;case 'M':o.domain=optarg;break;case 'N':o.profile=optarg;break;case 'a':o.auth=optarg;break;case 'P':o.cert=optarg;break;case 'D':o.dn=optarg;break;case 'w':o.pw=optarg;break;case 'j':o.pwfile=optarg;break;case 't':o.table=1;break;case 'p':o.p=1;break;case 's':o.s=1;break;case 'g':o.g=1;break;case 'u':o.u=1;break;case 'V':puts("ldaplist " VERSION);return 0;default:usage(c=='?'?stdout:stderr);return c=='?'?0:2;}
+ while((c=getopt(argc,argv,"dlvh:M:N:a:P:D:w:j:tpsguyV?"))!=-1)switch(c){
+ case 'd':o.debug=1;break;case 'l':break;case 'v':o.verbose=1;break;case 'h':o.host=optarg;break;case 'M':o.domain=optarg;break;case 'N':o.profile=optarg;break;case 'a':o.auth=optarg;break;case 'P':o.cert=optarg;break;case 'D':o.dn=optarg;break;case 'w':o.pw=optarg;break;case 'j':o.pwfile=optarg;break;case 't':o.table=1;break;case 'p':o.p=1;break;case 's':o.s=1;break;case 'g':o.g=1;break;case 'u':o.u=1;break;case 'y':o.y=1;break;case 'V':puts("ldaplist " VERSION);return 0;default:usage(c=='?'?stdout:stderr);return c=='?'?0:2;}
  profile(o.profile,&o);
  if(o.pwfile){FILE *f=fopen(o.pwfile,"r");if(!f){perror("password file");return 2;}char *line=NULL;size_t n=0;if(getline(&line,&n,f)<0){fclose(f);free(line);return 2;}fclose(f);line[strcspn(line,"\r\n")]=0;o.pw=line;}
  if(o.pw&&!o.dn){fputs("ldaplist: -w/-j requires -D\n",stderr);return 2;}
@@ -68,11 +68,17 @@ int main(int argc,char **argv){
  else {fprintf(stderr,"unsupported auth method: %s\n",o.auth);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"LDAP authentication failed: %s\n",ldap_err2string(rc));ldap_unbind_ext_s(ld,NULL,NULL);return 1;}
  if(o.verbose)fprintf(stderr,"Connected to %s; base DN %s; auth %s\n",uri,base,o.auth);
- const char *ous[]={"ou=People","ou=SUDOers","ou=Groups","ou=automount"};const char *envs[]={"LDAPLIST_PEOPLE_OU","LDAPLIST_SUDOERS_OU","LDAPLIST_GROUPS_OU","LDAPLIST_AUTOMOUNT_OU"};int kinds[]={0,1,2,3};int flags[]={o.p,o.s,o.g,o.u};int selected=o.p||o.s||o.g||o.u,err=0;
- for(int i=0;i<4;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);snprintf(dn,sizeof(dn),"%s,%s",ou&&*ou?ou:ous[i],base);LDAPMessage *res=NULL;
+ const char *ous[]={"ou=People","ou=SUDOers","ou=Groups","ou=automount","ou=policies"};const char *envs[]={"LDAPLIST_PEOPLE_OU","LDAPLIST_SUDOERS_OU","LDAPLIST_GROUPS_OU","LDAPLIST_AUTOMOUNT_OU","LDAPLIST_POLICIES_OU"};int kinds[]={0,1,2,3,4};int flags[]={o.p,o.s,o.g,o.u,o.y};int selected=o.p||o.s||o.g||o.u||o.y,err=0;
+ for(int i=0;i<5;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);snprintf(dn,sizeof(dn),"%s,%s",ou&&*ou?ou:ous[i],base);LDAPMessage *res=NULL;
  rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,"(objectClass=*)",NULL,0,NULL,NULL,&tv,0,&res);
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}if(i==0&&o.table)puts("uid\tfirstname\tlastname\tmail\tmobile");
- for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,kinds[i],o.table);ldap_msgfree(res);}
+ for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
+ if(kinds[i]==4){
+  char *entrydn=ldap_get_dn(ld,e);puts(entrydn?entrydn:"");if(entrydn)ldap_memfree(entrydn);
+  const char *attrs[]={"cn","pwdAttribute","pwdMinAge","pwdMaxAge","pwdInHistory","pwdCheckQuality","pwdMinLength","pwdExpireWarning","pwdGraceAuthNLimit","pwdLockout","pwdLockoutDuration","pwdMaxFailure","pwdFailureCountInterval","pwdMustChange","pwdAllowUserChange","pwdSafeModify","msDS-PasswordSettingsPrecedence","msDS-PasswordReversibleEncryptionEnabled","msDS-PasswordHistoryLength","msDS-PasswordComplexityEnabled","msDS-MinimumPasswordLength","msDS-MinimumPasswordAge","msDS-MaximumPasswordAge","msDS-LockoutThreshold","msDS-LockoutDuration","msDS-LockoutObservationWindow",NULL};
+  for(int ai=0;attrs[ai];ai++){char *v=attr(ld,e,attrs[ai]);if(*v)printf("  %s: %s\\n",attrs[ai],v);free(v);}
+ }else print_entry(ld,e,kinds[i],o.table);
+ }ldap_msgfree(res);}
  if(!selected){if(optind>=argc){usage(stderr);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}const char *db=argv[optind++];int k=-1;const char *ou=NULL,*a="cn";
  if(!strcasecmp(db,"passwd")||!strcasecmp(db,"people")){k=0;ou=ous[0];a="uid";}else if(!strcasecmp(db,"sudoers")){k=1;ou=ous[1];}else if(!strcasecmp(db,"group")||!strcasecmp(db,"groups")){k=2;ou=ous[2];}else if(!strcasecmp(db,"automount")){k=3;ou=ous[3];a="automountKey";}
  if(k<0){fprintf(stderr,"unsupported database: %s\n",db);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
