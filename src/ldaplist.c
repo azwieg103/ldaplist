@@ -40,6 +40,24 @@ static char *attr(LDAP *ld,LDAPMessage *e,const char *a){
 }
 static void table_header(void){ printf("| %-12s | %-16s | %-20s | %-32s | %-16s |\n","uid","firstname","lastname","mail","mobile"); puts("|--------------|------------------|----------------------|----------------------------------|------------------|"); }
 static void table_row(const char *uid,const char *gn,const char *sn,const char *mail,const char *mob){ printf("| %-12.12s | %-16.16s | %-20.20s | %-32.32s | %-16.16s |\n",uid,gn,sn,mail,mob); }
+static LDAP *sort_ld;
+static int uid_compare(const void *ap,const void *bp){
+ LDAPMessage *a=*(LDAPMessage * const *)ap,*b=*(LDAPMessage * const *)bp;
+ char *ua=attr(sort_ld,a,"uid"),*ub=attr(sort_ld,b,"uid");
+ int c=strcasecmp(ua,ub);if(!c)c=strcmp(ua,ub);free(ua);free(ub);return c;
+}
+static void print_people_sorted(LDAP *ld,LDAPMessage *res,int table){
+ size_t n=0,cap=32;LDAPMessage **entries=malloc(cap*sizeof(*entries));
+ if(!entries){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,0,table);return;}
+ for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
+  char *uid=attr(ld,e,"uid");int is_user=*uid!='\\0';free(uid);if(!is_user)continue;
+  if(n==cap){cap*=2;LDAPMessage **tmp=realloc(entries,cap*sizeof(*entries));if(!tmp){free(entries);for(LDAPMessage *x=ldap_first_entry(ld,res);x;x=ldap_next_entry(ld,x))print_entry(ld,x,0,table);return;}entries=tmp;}
+  entries[n++]=e;
+ }
+ sort_ld=ld;qsort(entries,n,sizeof(*entries),uid_compare);
+ for(size_t i=0;i<n;i++)print_entry(ld,entries[i],0,table);
+ free(entries);
+}
 static void print_entry(LDAP *ld,LDAPMessage *e,int kind,int table){
  char *uid=attr(ld,e,"uid"),*gn=attr(ld,e,"givenName"),*sn=attr(ld,e,"sn"),*mail=attr(ld,e,"mail"),*mob=attr(ld,e,"mobile");
  if(kind==0&&table){if(*uid)table_row(uid,gn,sn,mail,mob);}
@@ -86,8 +104,7 @@ int main(int argc,char **argv){
  for(int i=0;i<5;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);snprintf(dn,sizeof(dn),"%s,%s",ou&&*ou?ou:ous[i],base);LDAPMessage *res=NULL;
  rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,"(objectClass=*)",NULL,0,NULL,NULL,&tv,0,&res);
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}if(i==0&&o.table)table_header();
- for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
- if(kinds[i]==4){
+ if(kinds[i]==0&&!o.table){}\n if(kinds[i]==0){print_people_sorted(ld,res,o.table);}\n else for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)) {\n if(kinds[i]==4){
   char *entrydn=ldap_get_dn(ld,e);puts(entrydn?entrydn:"");if(entrydn)ldap_memfree(entrydn);
   const char *attrs[]={"cn","pwdAttribute","pwdMinAge","pwdMaxAge","pwdInHistory","pwdCheckQuality","pwdMinLength","pwdExpireWarning","pwdGraceAuthNLimit","pwdLockout","pwdLockoutDuration","pwdMaxFailure","pwdFailureCountInterval","pwdMustChange","pwdAllowUserChange","pwdSafeModify","msDS-PasswordSettingsPrecedence","msDS-PasswordReversibleEncryptionEnabled","msDS-PasswordHistoryLength","msDS-PasswordComplexityEnabled","msDS-MinimumPasswordLength","msDS-MinimumPasswordAge","msDS-MaximumPasswordAge","msDS-LockoutThreshold","msDS-LockoutDuration","msDS-LockoutObservationWindow",NULL};
   for(int ai=0;attrs[ai];ai++){char *v=attr(ld,e,attrs[ai]);if(*v)printf("  %s: %s\n",attrs[ai],v);free(v);}
@@ -98,6 +115,6 @@ int main(int argc,char **argv){
  if(k<0){fprintf(stderr,"unsupported database: %s\n",db);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  char dn[2300],filter[8192];snprintf(dn,sizeof(dn),"%s,%s",ou,base);
  if(optind<argc){size_t used=(size_t)snprintf(filter,sizeof(filter),"(|");for(;optind<argc;optind++){char x[2048];esc_filter(argv[optind],x,sizeof(x));int z=snprintf(filter+used,sizeof(filter)-used,"(%s=%s)",a,x);if(z>0&&(size_t)z<sizeof(filter)-used)used+=(size_t)z;}snprintf(filter+used,sizeof(filter)-used,")");}else snprintf(filter,sizeof(filter),"(objectClass=*)");
- LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)table_header();for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,k,o.table);ldap_msgfree(res);}}
+ LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)table_header();if(k==0)print_people_sorted(ld,res,o.table);else for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,k,o.table);ldap_msgfree(res);}}
  ldap_unbind_ext_s(ld,NULL,NULL);if((o.pwfile||pw_owned)&&o.pw){memset((char*)o.pw,0,strlen(o.pw));free((char*)o.pw);}return err?1:0;
 }
