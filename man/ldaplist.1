@@ -11,19 +11,22 @@ ldaplist \- list entries from OpenLDAP and Active Directory
 .RB [ \-P certifPath ]
 .RB [ \-D bindDN ]
 .RB [ \-w bindPassword ]
+.RB [ \-W ]
 .RB [ \-j passwdFile ]
 .RB [ \-t ]
-.RB [ \-p | \-s | \-g | \-u ]
+.RB [ \-p | \-s | \-g | \-u | \-y ]
 .RI [ database [ key ...]]
 .SH DESCRIPTION
 A read-only LDAP directory listing utility written in C. Supports LDAPv3, OpenLDAP, Active Directory, simple binds, and Kerberos/GSSAPI.
+.PP
+With no arguments, ldaplist automatically discovers usable directory settings and displays the People table. Explicit command-line settings can be used when discovery needs to be overridden. Searches normally run recursively below the discovered base DN and use LDAP object-class filters rather than requiring fixed People or Groups containers.
 .SH OPTIONS
 .TP
 .B -d
 Enable LDAP library diagnostics.
 .TP
 .B -l
-Display the full distinguished name and every LDAP attribute returned for each entry. For example, use ldaplist -l passwd username.
+Display the full distinguished name and every LDAP attribute returned for each entry. For example, use ldaplist -l passwd username. Multi-valued attributes are printed on separate lines.
 .TP
 .B -v
 Verbose connection diagnostics.
@@ -38,45 +41,87 @@ DNS domain converted to a base DN, or an explicit base DN.
 Read /etc/ldaplist/profiles/NAME.conf.
 .TP
 .BI -a " method"
-kerberos (default), simple, bind, anonymous, or gssapi.
+Authentication method: kerberos (default), simple, bind, anonymous, or gssapi.
 .TP
 .BI -P " certifPath"
 CA certificate file or directory.
 .TP
 .BI -D " bindDN"
-Simple-bind DN.
+Bind DN.
 .TP
 .BI -w " bindPassword"
-Password argument; prefer -j.
+Password argument; prefer -W or -j. Command-line passwords may be visible to other local users and retained in shell history.
 .TP
 .B -W
-Prompt for the simple-bind password without echoing it. Selects simple bind unless -a was explicitly supplied.
+Prompt for a simple-bind password without echoing it. Selects simple bind unless -a was explicitly supplied.
 .TP
 .BI -j " passwdFile"
-Read first line of password file.
+Read the first line of a password file. Protect the file with restrictive permissions.
 .TP
 .B -t
-Enable table output. Tables are now the default; this option remains for compatibility.
+Enable table output. Tables are the default; this option remains for compatibility.
 .TP
 .B -p
 Display the People table. This is also the default when no selector or positional database is supplied.
 .TP
 .B -s
-Search ou=SUDOers.
+Display the SUDOers table.
 .TP
 .B -g
-Search ou=Groups.
+Display the Groups table. The current group listing includes only entries with a gidNumber attribute; groups without gidNumber are omitted. The members column displays member values returned by the directory.
 .TP
 .B -u
-Search ou=automount.
+Display the automount map table.
 .TP
 .B -y
-Search ou=policies and display common OpenLDAP ppolicy and Active Directory fine-grained password-policy attributes. Does not calculate effective policy for an individual user.
+Display password-policy entries, including common OpenLDAP ppolicy and Active Directory fine-grained password-policy attributes. Does not calculate the effective policy for an individual user.
+.PP
+Selectors may be combined. A positional database and optional key may also be supplied, for example: ldaplist passwd username.
 .SH OUTPUT
-By default, ldaplist displays fixed-width pipe-delimited tables for People, Groups, SUDOers, automount maps, and password policies. The People columns are uid, firstname, lastname, mail, and mobile. Use -l with a positional database and key, such as 'ldaplist -l passwd andrew', to display the entry DN and all attributes returned by the LDAP server, one attribute per line. Attribute visibility is controlled by LDAP access controls.
+Normal listings use fixed-width, pipe-delimited tables. The default People table columns are uid, firstname, lastname, mail, and mobile. Group output includes group name, gidNumber, and members. The exact attributes available depend on the directory schema and the LDAP access controls.
+.PP
+Use -l with a positional database and key, such as 'ldaplist -l passwd andrew', to display the entry DN followed by all attributes returned by the LDAP server, one attribute value per line. This detailed output is intended for inspecting the complete visible LDAP entry; it is not formatted as a table.
 .SH AUTHENTICATION
-Kerberos/GSSAPI is the default. Acquire a ticket with kinit; the current credential cache is used automatically. For simple bind, use -D with -W to prompt without echoing the password. Simple binds should use LDAPS and trusted CA validation.
+Kerberos/GSSAPI is the default. Acquire a ticket with kinit; the current credential cache is used automatically. For simple bind, use -D with -W to prompt without echoing the password. Simple binds should use LDAPS and trusted CA validation. ldaplist does not extract credentials from private SSSD databases.
+.SH AUTOMATIC DISCOVERY
+The client attempts to use available workstation configuration, including LDAP client settings, readable SSSD domain settings, the Kerberos default realm, the host DNS domain, and LDAP DNS SRV records. SSSD configuration is often readable only by root; ldaplist does not require access to it and does not read private SSSD databases. Discovery is best-effort; use -h and -M to override the server and base DN when necessary.
 .SH ENVIRONMENT
-LDAPURI, LDAPLIST_BASE_DN, LDAPLIST_DOMAIN, LDAPLIST_PEOPLE_OU, LDAPLIST_SUDOERS_OU, LDAPLIST_GROUPS_OU, LDAPLIST_AUTOMOUNT_OU, LDAPLIST_POLICIES_OU.
+.TP
+.B LDAPURI
+LDAP URI or server URI setting.
+.TP
+.B LDAPLIST_BASE_DN
+Explicit LDAP search base DN.
+.TP
+.B LDAPLIST_DOMAIN
+DNS domain used to derive the base DN.
+.TP
+.B LDAPLIST_PEOPLE_OU, LDAPLIST_SUDOERS_OU, LDAPLIST_GROUPS_OU, LDAPLIST_AUTOMOUNT_OU, LDAPLIST_POLICIES_OU
+Optional subtree restrictions for the corresponding searches. Without an override, searches use the discovered base DN.
+.SH EXAMPLES
+.nf
+ldaplist
+ldaplist -g
+ldaplist -p -s -g -u
+ldaplist -l passwd andrew
+ldaplist -h ldap.example.com -M example.com -p
+ldaplist -D 'uid=reader,ou=People,dc=example,dc=com' -W -p
+.fi
+.SH FILES
+.TP
+.I /etc/openldap/ldap.conf
+OpenLDAP client configuration, when readable.
+.TP
+.I /etc/ldap/ldap.conf
+Alternative LDAP client configuration path, when readable.
+.TP
+.I /etc/sssd/sssd.conf
+SSSD domain configuration, when readable; private credentials are not accessed.
+.TP
+.I /etc/krb5.conf
+Kerberos realm configuration.
+.TP
+.I /etc/ldaplist/profiles/NAME.conf
+Optional named connection profile.
 .SH LICENSE
 GNU General Public License version 2 only (GPL-2.0-only).
