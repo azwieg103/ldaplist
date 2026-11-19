@@ -20,7 +20,7 @@
 #define VERSION "1.0.0"
 typedef struct { const char *host,*domain,*profile,*auth,*cert,*dn,*pw,*pwfile,*base; int port,debug,verbose,table,long_output,p,s,g,u,y; } Opt;
 static void usage(FILE *f) {
- fprintf(f,"ldaplist %s\nUsage: ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword|-W|-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]\n\n-d debug  -l classic output  -v verbose  -h server[:port]  -M domain/base DN\n-N profile  -a kerberos(default)|simple|gssapi|anonymous  -P CA file/dir  -D bind DN\n-w password  -W prompt for password  -j password file  -t People table  -p People  -s SUDOers  -g Groups  -u automount  -y password policies\n-V version  -? help\n",VERSION);
+ fprintf(f,"ldaplist %s\nUsage: ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword|-W|-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]\n\n-d debug  -l classic output  -v verbose  -h server[:port]  -M domain/base DN\n-N profile  -a kerberos(default)|simple|gssapi|anonymous  -P CA file/dir  -D bind DN\n-w password  -W prompt for password  -j password file  -t People table  -p People  -s SUDOers  -g Groups  -u automount  -y password policies\n-V version  -? help\n\nExamples:\n  ldaplist -l passwd alice\n  ldaplist passwd -u alice -l\n",VERSION);
 }
 static char *trim(char *s){while(isspace((unsigned char)*s))s++;char *e=s+strlen(s);while(e>s&&isspace((unsigned char)e[-1]))*--e=0;return s;}
 static void domain_dn(const char *d,char *out,size_t n){
