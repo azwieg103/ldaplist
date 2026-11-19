@@ -127,6 +127,23 @@ static const char *search_filter(int kind){
 static void make_search_dn(char *out,size_t n,const char *base,const char *ou){
  if(ou&&*ou)snprintf(out,n,"%s,%s",ou,base);else snprintf(out,n,"%s",base);
 }
+/* Exclude any entry whose DN is beneath an OU named "terminated",
+ * regardless of where that OU appears in the searched subtree. */
+static int is_terminated_dn(LDAP *ld,LDAPMessage *entry){
+ char *dn=ldap_get_dn(ld,entry);if(!dn)return 0;
+ int excluded=0;char *p=dn;
+ while(*p){
+  char *comma=strchr(p,',');size_t len=comma?(size_t)(comma-p):strlen(p);
+  while(len&&isspace((unsigned char)p[len-1]))len--;
+  while(len&&isspace((unsigned char)*p)){p++;len--;}
+  if(len>=3&&!strncasecmp(p,"ou=",3)){
+   size_t value_len=len-3;
+   if(value_len==10&&!strncasecmp(p+3,"terminated",10)){excluded=1;break;}
+  }
+  if(!comma)break;p=comma+1;
+ }
+ ldap_memfree(dn);return excluded;
+}
 
 static int interact(LDAP *ld,unsigned flags,void *defaults,void *in){
  (void)ld;(void)flags;(void)defaults;sasl_interact_t *i=in;
@@ -235,8 +252,9 @@ int main(int argc,char **argv){
  for(int i=0;i<5;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);make_search_dn(dn,sizeof(dn),base,ou&&*ou?ou:ous[i]);LDAPMessage *res=NULL;
  rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,search_filter(i),NULL,0,NULL,NULL,&tv,0,&res);
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}if(i==0&&o.table)table_header();
- if(kinds[i]==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}
+ if(kinds[i]==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}
  else {if(o.table)table_header_kind(kinds[i]); for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)) {
+ if(is_terminated_dn(ld,e))continue;
  if(kinds[i]==4){
   if(o.table)print_kind_table_row(ld,e,4);else print_long_entry(ld,e);
  }else print_entry(ld,e,kinds[i],o.table);
@@ -246,6 +264,6 @@ int main(int argc,char **argv){
  if(k<0){fprintf(stderr,"unsupported database: %s\n",db);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  char dn[2300],filter[8192];const char *dbou=getenv(k==0?"LDAPLIST_PEOPLE_OU":k==1?"LDAPLIST_SUDOERS_OU":k==2?"LDAPLIST_GROUPS_OU":"LDAPLIST_AUTOMOUNT_OU");make_search_dn(dn,sizeof(dn),base,dbou&&*dbou?dbou:ou);
  if(optind<argc){size_t used=(size_t)snprintf(filter,sizeof(filter),"(|");for(;optind<argc;optind++){char x[2048];esc_filter(argv[optind],x,sizeof(x));int z=snprintf(filter+used,sizeof(filter)-used,"(%s=%s)",a,x);if(z>0&&(size_t)z<sizeof(filter)-used)used+=(size_t)z;}snprintf(filter+used,sizeof(filter)-used,")");}else snprintf(filter,sizeof(filter),"%s",search_filter(k));
- LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)table_header();if(k==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}else {if(o.table)table_header_kind(k);for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,k,o.table);}ldap_msgfree(res);}}
+ LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)table_header();if(k==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}else {if(o.table)table_header_kind(k);for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_entry(ld,e,k,o.table);}ldap_msgfree(res);}}
  ldap_unbind_ext_s(ld,NULL,NULL);if((o.pwfile||pw_owned)&&o.pw){memset((char*)o.pw,0,strlen(o.pw));free((char*)o.pw);}return err?1:0;
 }
