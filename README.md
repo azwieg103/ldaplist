@@ -12,7 +12,8 @@ A C-based open-source LDAP listing utility for Linux. This project implements a 
 - Searches discover directory objects below the base DN rather than assuming every directory uses Unix-specific `ou=People` and `ou=Groups` containers.
 - Password file support (`-j`); prefer it over `-w`.
 - Independent OU selectors: People, SUDOers, Groups, automount.
-- Classic passwd-style People output and tab-separated user table.
+- Pipe-delimited tables by default for People, Groups, SUDOers, automount maps, and password policies.
+- `ldaplist` with no arguments defaults to the People table; `-l database key` displays the full DN and all returned LDAP attributes.
 - AlmaLinux 10 x86_64 RPM and source RPM, published as GitHub Releases after successful CI.
 
 ## Syntax
@@ -24,7 +25,7 @@ ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [
 | Option | Meaning |
 |---|---|
 | `-d` | LDAP library diagnostics |
-| `-l` | Classic/long output (default) |
+| `-l` | Long/detail output: DN followed by every returned LDAP attribute |
 | `-v` | Verbose connection and search diagnostics |
 | `-h` | LDAP host, optionally with port; 636 selects LDAPS |
 | `-M` | DNS domain (converted to a base DN) or explicit base DN |
@@ -35,14 +36,14 @@ ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [
 | `-w` | Bind password (visible in process arguments; avoid when possible) |
 | `-W` | Prompt for a bind password without echoing it; selects simple bind unless `-a` was explicitly supplied |
 | `-j` | Read password from first line of a file |
-| `-t` | Tab-separated People table |
+| `-t` | Table output (now the default; retained for compatibility) |
 | `-p` | Search `ou=People` |
 | `-s` | Search `ou=SUDOers` |
 | `-g` | Search `ou=Groups` |
 | `-u` | Search `ou=automount` |
 | `-V` | Version; `-?` help |
 
-The selectors can be combined. By default, searches run below the discovered base DN and filter for matching object classes. Set an `LDAPLIST_*_OU` environment variable to restrict a search to a particular subtree. People classic output is `uid:uidNumber:gidNumber:gecos:homeDirectory:loginShell`. Table mode outputs fixed-width pipe-delimited columns: `uid`, `firstname`, `lastname`, `mail`, and `mobile`.
+With no selector or positional database, `ldaplist` displays the People table. The `-p`, `-g`, `-s`, `-u`, and `-y` selectors display pipe-delimited tables; selectors can be combined. `-t` remains accepted as a compatibility flag but is no longer required. Use `-l passwd USER` (or `-l people USER`) for the full LDAP entry: its DN and all attributes returned by the directory, one attribute per line. The directory's access controls determine which attributes are visible. By default, searches run below the discovered base DN and filter for matching object classes. Set an `LDAPLIST_*_OU` environment variable to restrict a search to a particular subtree. The People table columns are `uid`, `firstname`, `lastname`, `mail`, and `mobile`.
 
 ## Kerberos SSO on Linux
 
@@ -71,7 +72,8 @@ Use LDAPS and a trusted CA for simple binds. Do not use `-w` on shared systems: 
 ## Examples
 
 ```bash
-ldaplist -h ldap.example.com -M example.com -p -t
+ldaplist -h ldap.example.com -M example.com
+ldaplist -h ldap.example.com -M example.com -l passwd jdoe
 ldaplist -h ldap.example.com -M example.com -s
 ldaplist -h ldap.example.com -M example.com -g
 ldaplist -h ldap.example.com -M example.com -u
