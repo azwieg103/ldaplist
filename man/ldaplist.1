@@ -23,7 +23,7 @@ A read-only LDAP directory listing utility written in C. Supports LDAPv3, OpenLD
 Enable LDAP library diagnostics.
 .TP
 .B -l
-Classic output (default).
+Display the full distinguished name and every LDAP attribute returned for each entry. For example, use ldaplist -l passwd username.
 .TP
 .B -v
 Verbose connection diagnostics.
@@ -56,10 +56,10 @@ Prompt for the simple-bind password without echoing it. Selects simple bind unle
 Read first line of password file.
 .TP
 .B -t
-Tab-separated People columns: uid, firstname, lastname, mail, mobile.
+Enable table output. Tables are now the default; this option remains for compatibility.
 .TP
 .B -p
-Search ou=People.
+Display the People table. This is also the default when no selector or positional database is supplied.
 .TP
 .B -s
 Search ou=SUDOers.
@@ -72,6 +72,8 @@ Search ou=automount.
 .TP
 .B -y
 Search ou=policies and display common OpenLDAP ppolicy and Active Directory fine-grained password-policy attributes. Does not calculate effective policy for an individual user.
+.SH OUTPUT
+By default, ldaplist displays fixed-width pipe-delimited tables for People, Groups, SUDOers, automount maps, and password policies. The People columns are uid, firstname, lastname, mail, and mobile. Use -l with a positional database and key, such as 'ldaplist -l passwd andrew', to display the entry DN and all attributes returned by the LDAP server, one attribute per line. Attribute visibility is controlled by LDAP access controls.
 .SH AUTHENTICATION
 Kerberos/GSSAPI is the default. Acquire a ticket with kinit; the current credential cache is used automatically. For simple bind, use -D with -W to prompt without echoing the password. Simple binds should use LDAPS and trusted CA validation.
 .SH ENVIRONMENT
