@@ -51,7 +51,7 @@ static void print_people_sorted(LDAP *ld,LDAPMessage *res,int table){
  size_t n=0,cap=32;LDAPMessage **entries=malloc(cap*sizeof(*entries));
  if(!entries){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,0,table);return;}
  for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
-  char *uid=attr(ld,e,"uid");int is_user=*uid!='\\0';free(uid);if(!is_user)continue;
+  char *uid=attr(ld,e,"uid");int is_user=*uid!='\0';free(uid);if(!is_user)continue;
   if(n==cap){cap*=2;LDAPMessage **tmp=realloc(entries,cap*sizeof(*entries));if(!tmp){free(entries);for(LDAPMessage *x=ldap_first_entry(ld,res);x;x=ldap_next_entry(ld,x))print_entry(ld,x,0,table);return;}entries=tmp;}
   entries[n++]=e;
  }
