@@ -110,7 +110,7 @@ static void discover_defaults(Opt *o){
   const char *uri=getenv("LDAPURI");if(uri&&*uri)o->host=uri;
  }
  if(!o->host&&o->domain){
-  char q[512],uri[1024];snprintf(q,sizeof(q),"_ldap._tcp.dc._msdcs.%s",o->domain);
+  char q[512],uri[1024]={0};snprintf(q,sizeof(q),"_ldap._tcp.dc._msdcs.%s",o->domain);
   if(!dns_srv(q,uri,sizeof(uri))){snprintf(q,sizeof(q),"_ldap._tcp.%s",o->domain);dns_srv(q,uri,sizeof(uri));}
   if(*uri)o->host=strdup(uri);
  }
@@ -185,8 +185,9 @@ int main(int argc,char **argv){
  if(o.pwfile){FILE *f=fopen(o.pwfile,"r");if(!f){perror("password file");return 2;}char *line=NULL;size_t n=0;if(getline(&line,&n,f)<0){fclose(f);free(line);return 2;}fclose(f);line[strcspn(line,"\r\n")]=0;o.pw=line;}
  if((o.pw||o.pwfile)&&!auth_explicit)o.auth="simple";
  if(o.pw&&!o.dn){fputs("ldaplist: -w/-W/-j requires -D\n",stderr);return 2;}
- char uri[1024],host[768];const char *envuri=getenv("LDAPURI");
- if(o.host){snprintf(host,sizeof(host),"%s",o.host);char *colon=strrchr(host,':');if(colon&&strchr(host,']')==NULL){*colon++=0;o.port=atoi(colon);}snprintf(uri,sizeof(uri),"%s://%s:%d",o.port==636?"ldaps":"ldap",host,o.port);}
+ char uri[1024]={0},host[768];const char *envuri=getenv("LDAPURI");
+ if(o.host&&strstr(o.host,"://"))snprintf(uri,sizeof(uri),"%s",o.host);
+ else if(o.host){snprintf(host,sizeof(host),"%s",o.host);char *colon=strrchr(host,':');if(colon&&strchr(host,']')==NULL){*colon++=0;o.port=atoi(colon);}snprintf(uri,sizeof(uri),"%s://%s:%d",o.port==636?"ldaps":"ldap",host,o.port);}
  else if(o.host&&strstr(o.host,"://"))snprintf(uri,sizeof(uri),"%s",o.host);
  else if(envuri&&*envuri)snprintf(uri,sizeof(uri),"%s",envuri);
  char base[2048]={0};if(o.base)snprintf(base,sizeof(base),"%s",o.base);else domain_dn(o.domain,base,sizeof(base));
