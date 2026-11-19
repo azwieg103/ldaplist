@@ -38,11 +38,11 @@ static int interact(LDAP *ld,unsigned flags,void *defaults,void *in){
 static char *attr(LDAP *ld,LDAPMessage *e,const char *a){
  struct berval **v=ldap_get_values_len(ld,e,a);char *s=(v&&v[0])?strndup(v[0]->bv_val,v[0]->bv_len):strdup("");if(v)ldap_value_free_len(v);return s;
 }
-static void table_header(void){ puts("| uid          | firstname        | lastname             | mail                             | mobile           |"); puts("|--------------|------------------|----------------------|----------------------------------|------------------|"); }
+static void table_header(void){ printf("| %-12s | %-16s | %-20s | %-32s | %-16s |\n","uid","firstname","lastname","mail","mobile"); puts("|--------------|------------------|----------------------|----------------------------------|------------------|"); }
 static void table_row(const char *uid,const char *gn,const char *sn,const char *mail,const char *mob){ printf("| %-12.12s | %-16.16s | %-20.20s | %-32.32s | %-16.16s |\n",uid,gn,sn,mail,mob); }
 static void print_entry(LDAP *ld,LDAPMessage *e,int kind,int table){
  char *uid=attr(ld,e,"uid"),*gn=attr(ld,e,"givenName"),*sn=attr(ld,e,"sn"),*mail=attr(ld,e,"mail"),*mob=attr(ld,e,"mobile");
- if(kind==0&&table)table_row(uid,gn,sn,mail,mob);
+ if(kind==0&&table){if(*uid)table_row(uid,gn,sn,mail,mob);}
  else if(kind==0){char *un=attr(ld,e,"uidNumber"),*gnn=attr(ld,e,"gidNumber"),*gecos=attr(ld,e,"gecos"),*home=attr(ld,e,"homeDirectory"),*shell=attr(ld,e,"loginShell");printf("%s:%s:%s:%s:%s:%s\n",uid,un,gnn,*gecos?gecos:gn,home,shell);free(un);free(gnn);free(gecos);free(home);free(shell);}
  else {char *dn=ldap_get_dn(ld,e);puts(dn?dn:"");if(kind==1){char *x=attr(ld,e,"sudoUser");if(*x)printf("  sudoUser: %s\n",x);free(x);}if(kind==2){char *x=attr(ld,e,"memberUid");if(*x)printf("  memberUid: %s\n",x);free(x);}if(kind==3){char *k=attr(ld,e,"automountKey"),*v=attr(ld,e,"automountInformation");printf("%s %s\n",k,v);free(k);free(v);}if(dn)ldap_memfree(dn);}
  free(uid);free(gn);free(sn);free(mail);free(mob);
