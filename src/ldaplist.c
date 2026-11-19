@@ -198,7 +198,8 @@ int main(int argc,char **argv){
  while((c=getopt(argc,argv,"dlvh:M:N:a:P:D:w:Wj:tpsguyV?"))!=-1)switch(c){
  case 'd':o.debug=1;break;case 'l':o.long_output=1;break;case 'v':o.verbose=1;break;case 'h':o.host=optarg;break;case 'M':o.domain=optarg;break;case 'N':o.profile=optarg;break;case 'a':o.auth=optarg;auth_explicit=1;break;case 'P':o.cert=optarg;break;case 'D':o.dn=optarg;break;case 'w':o.pw=optarg;break;case 'W':prompt_pw=1;break;case 'j':o.pwfile=optarg;break;case 't':o.table=1;break;case 'p':o.p=1;break;case 's':o.s=1;break;case 'g':o.g=1;break;case 'u':o.u=1;break;case 'y':o.y=1;break;case 'V':puts("ldaplist " VERSION);return 0;default:usage(c=='?'?stdout:stderr);return c=='?'?0:2;}
  profile(o.profile,&o);
- discover_defaults(&o);\n if(!o.long_output)o.table=1;
+ discover_defaults(&o);
+ if(!o.long_output)o.table=1;
  if(prompt_pw){
   if(auth_explicit && strcasecmp(o.auth,"simple") && strcasecmp(o.auth,"bind")){
    fputs("ldaplist: -W cannot be combined with a non-simple -a method\n",stderr);return 2;
