@@ -145,19 +145,19 @@ static void table_header_kind(int kind){
  else puts("| policy                           | precedence   | minimumLength             |");
 }
 static void print_long_entry(LDAP *ld,LDAPMessage *e){
- char *dn=ldap_get_dn(ld,e);printf("dn: %s\\n",dn?dn:"");if(dn)ldap_memfree(dn);
+ char *dn=ldap_get_dn(ld,e);printf("dn: %s\n",dn?dn:"");if(dn)ldap_memfree(dn);
  BerElement *ber=NULL;for(char *name=ldap_first_attribute(ld,e,&ber);name;name=ldap_next_attribute(ld,e,ber)){
   struct berval **vals=ldap_get_values_len(ld,e,name);
-  if(vals){for(int i=0;vals[i];i++)printf("%s: %.*s\\n",name,(int)vals[i]->bv_len,vals[i]->bv_val);ldap_value_free_len(vals);}
+  if(vals){for(int i=0;vals[i];i++)printf("%s: %.*s\n",name,(int)vals[i]->bv_len,vals[i]->bv_val);ldap_value_free_len(vals);}
   ldap_memfree(name);
  }if(ber)ber_free(ber,0);
 }
 static void print_kind_table_row(LDAP *ld,LDAPMessage *e,int kind){
  char *a=NULL,*b=NULL,*c=NULL,*d=NULL;
- if(kind==1){a=attr(ld,e,"cn");b=attr(ld,e,"sudoUser");c=attr(ld,e,"sudoHost");d=attr(ld,e,"sudoCommand");printf("| %-24.24s | %-28.28s | %-28.28s | %-40.40s |\\n",a,b,c,d);}
- else if(kind==2){a=attr(ld,e,"cn");b=attr(ld,e,"gidNumber");c=attr(ld,e,"memberUid");if(!*c){free(c);c=attr(ld,e,"member");}printf("| %-24.24s | %-12.12s | %-48.48s |\\n",a,b,c);}
- else if(kind==3){a=attr(ld,e,"automountKey");b=attr(ld,e,"automountInformation");printf("| %-32.32s | %-64.64s |\\n",a,b);}
- else {a=attr(ld,e,"cn");b=attr(ld,e,"msDS-PasswordSettingsPrecedence");c=attr(ld,e,"msDS-MinimumPasswordLength");printf("| %-32.32s | %-12.12s | %-24.24s |\\n",a,b,c);}
+ if(kind==1){a=attr(ld,e,"cn");b=attr(ld,e,"sudoUser");c=attr(ld,e,"sudoHost");d=attr(ld,e,"sudoCommand");printf("| %-24.24s | %-28.28s | %-28.28s | %-40.40s |\n",a,b,c,d);}
+ else if(kind==2){a=attr(ld,e,"cn");b=attr(ld,e,"gidNumber");c=attr(ld,e,"memberUid");if(!*c){free(c);c=attr(ld,e,"member");}printf("| %-24.24s | %-12.12s | %-48.48s |\n",a,b,c);}
+ else if(kind==3){a=attr(ld,e,"automountKey");b=attr(ld,e,"automountInformation");printf("| %-32.32s | %-64.64s |\n",a,b);}
+ else {a=attr(ld,e,"cn");b=attr(ld,e,"msDS-PasswordSettingsPrecedence");c=attr(ld,e,"msDS-MinimumPasswordLength");printf("| %-32.32s | %-12.12s | %-24.24s |\n",a,b,c);}
  free(a);free(b);free(c);free(d);
 }
 static void print_entry(LDAP *ld,LDAPMessage *e,int kind,int table);
@@ -229,7 +229,8 @@ int main(int argc,char **argv){
  else {fprintf(stderr,"unsupported auth method: %s\n",o.auth);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"LDAP authentication failed: %s\n",ldap_err2string(rc));ldap_unbind_ext_s(ld,NULL,NULL);return 1;}
  if(o.verbose)fprintf(stderr,"Connected to %s; base DN %s; auth %s\n",uri,base,o.auth);
- const char *ous[]={"","","","",""};const char *envs[]={"LDAPLIST_PEOPLE_OU","LDAPLIST_SUDOERS_OU","LDAPLIST_GROUPS_OU","LDAPLIST_AUTOMOUNT_OU","LDAPLIST_POLICIES_OU"};int kinds[]={0,1,2,3,4};int flags[]={o.p,o.s,o.g,o.u,o.y};int selected=o.p||o.s||o.g||o.u||o.y,err=0;\n if(!selected&&optind>=argc){o.p=1;flags[0]=1;selected=1;}
+ const char *ous[]={"","","","",""};const char *envs[]={"LDAPLIST_PEOPLE_OU","LDAPLIST_SUDOERS_OU","LDAPLIST_GROUPS_OU","LDAPLIST_AUTOMOUNT_OU","LDAPLIST_POLICIES_OU"};int kinds[]={0,1,2,3,4};int flags[]={o.p,o.s,o.g,o.u,o.y};int selected=o.p||o.s||o.g||o.u||o.y,err=0;
+ if(!selected&&optind>=argc){o.p=1;flags[0]=1;selected=1;}
  for(int i=0;i<5;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);make_search_dn(dn,sizeof(dn),base,ou&&*ou?ou:ous[i]);LDAPMessage *res=NULL;
  rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,search_filter(i),NULL,0,NULL,NULL,&tv,0,&res);
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}if(i==0&&o.table)table_header();
@@ -238,7 +239,7 @@ int main(int argc,char **argv){
  if(kinds[i]==4){
   char *entrydn=ldap_get_dn(ld,e);puts(entrydn?entrydn:"");if(entrydn)ldap_memfree(entrydn);
   const char *attrs[]={"cn","pwdAttribute","pwdMinAge","pwdMaxAge","pwdInHistory","pwdCheckQuality","pwdMinLength","pwdExpireWarning","pwdGraceAuthNLimit","pwdLockout","pwdLockoutDuration","pwdMaxFailure","pwdFailureCountInterval","pwdMustChange","pwdAllowUserChange","pwdSafeModify","msDS-PasswordSettingsPrecedence","msDS-PasswordReversibleEncryptionEnabled","msDS-PasswordHistoryLength","msDS-PasswordComplexityEnabled","msDS-MinimumPasswordLength","msDS-MinimumPasswordAge","msDS-MaximumPasswordAge","msDS-LockoutThreshold","msDS-LockoutDuration","msDS-LockoutObservationWindow",NULL};
-  for(int ai=0;attrs[ai];ai++){char *v=attr(ld,e,attrs[ai]);if(*v)printf("  %s: %s\n",attrs[ai],v);free(v);}
+  if(o.table)print_kind_table_row(ld,e,4);else print_long_entry(ld,e);
  }else print_entry(ld,e,kinds[i],o.table);
  }}ldap_msgfree(res);}
  if(!selected){if(optind>=argc){usage(stderr);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}const char *db=argv[optind++];int k=-1;const char *ou=NULL,*a="cn";
