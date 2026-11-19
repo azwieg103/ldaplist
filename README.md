@@ -74,7 +74,8 @@ Use LDAPS and a trusted CA for simple binds. Do not use `-w` on shared systems: 
 
 ```bash
 ldaplist -h ldap.example.com -M example.com
-ldaplist -h ldap.example.com -M example.com -l passwd jdoe
+ldaplist -l passwd alice
+ldaplist passwd -u alice -l
 ldaplist -h ldap.example.com -M example.com -s
 ldaplist -h ldap.example.com -M example.com -g
 ldaplist -h ldap.example.com -M example.com -u
