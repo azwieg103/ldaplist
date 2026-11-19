@@ -1,7 +1,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Wformat=2 -fstack-protector-strong
-LDLIBS += $(shell pkg-config --libs ldap libsasl2)
+LDLIBS += $(shell pkg-config --libs ldap libsasl2) -lresolv
 PREFIX ?= /usr
 .PHONY: all clean install check
 all: ldaplist
