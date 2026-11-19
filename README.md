@@ -84,7 +84,7 @@ ldaplist -h ldap.example.com -M example.com -p -s -g -u
 
 ## OU and schema configuration
 
-Searches run recursively below the discovered base DN by default. People matches POSIX accounts and AD user objects; Groups matches POSIX groups and AD groups; SUDOers and automount match their respective schema object classes. Directory layouts and schemas vary, so use the existing `LDAPLIST_*_OU` overrides when you need to limit a search to a subtree.
+Searches run recursively below the discovered base DN by default. People matches POSIX accounts and AD user objects; Groups matches POSIX groups and AD groups; SUDOers and automount match their respective schema object classes. **Current Groups output is limited to entries that have a `gidNumber` attribute** (the POSIX/RFC2307-style group view); groups without `gidNumber`, including some native AD groups, are omitted. The `members` column displays the member values returned by the directory. Directory layouts and schemas vary, so use the existing `LDAPLIST_*_OU` overrides when you need to limit a search to a subtree.
 
 Environment overrides:
 - `LDAPLIST_BASE_DN`, `LDAPLIST_DOMAIN`, `LDAPURI`
