@@ -234,7 +234,7 @@ int main(int argc,char **argv){
  for(int i=0;i<5;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);make_search_dn(dn,sizeof(dn),base,ou&&*ou?ou:ous[i]);LDAPMessage *res=NULL;
  rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,search_filter(i),NULL,0,NULL,NULL,&tv,0,&res);
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}if(i==0&&o.table)table_header();
- if(kinds[i]==0){print_people_sorted(ld,res,o.table);}
+ if(kinds[i]==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}
  else {if(o.table)table_header_kind(kinds[i]); for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)) {
  if(kinds[i]==4){
   char *entrydn=ldap_get_dn(ld,e);puts(entrydn?entrydn:"");if(entrydn)ldap_memfree(entrydn);
