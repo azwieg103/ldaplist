@@ -8,6 +8,8 @@ A C-based open-source LDAP listing utility for Linux. This project implements a 
 - C implementation using OpenLDAP `libldap` (no shelling out to ldapsearch).
 - LDAPv3; LDAP and LDAPS URIs.
 - Kerberos/GSSAPI SSO by default, using the workstation credential cache; simple bind remains available with `-W`, `-w`, or `-j`.
+- Unprivileged automatic discovery from readable OpenLDAP client configuration, readable SSSD domain settings, Kerberos realm configuration, host DNS domain, and LDAP DNS SRV records.
+- Searches discover directory objects below the base DN rather than assuming every directory uses Unix-specific `ou=People` and `ou=Groups` containers.
 - Password file support (`-j`); prefer it over `-w`.
 - Independent OU selectors: People, SUDOers, Groups, automount.
 - Classic passwd-style People output and tab-separated user table.
@@ -40,7 +42,7 @@ ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [
 | `-u` | Search `ou=automount` |
 | `-V` | Version; `-?` help |
 
-The OU selectors can be combined. People classic output is `uid:uidNumber:gidNumber:gecos:homeDirectory:loginShell`. Table mode outputs `uid, firstname, lastname, mail, mobile` as tab-separated columns.
+The selectors can be combined. By default, searches run below the discovered base DN and filter for matching object classes. Set an `LDAPLIST_*_OU` environment variable to restrict a search to a particular subtree. People classic output is `uid:uidNumber:gidNumber:gecos:homeDirectory:loginShell`. Table mode outputs fixed-width pipe-delimited columns: `uid`, `firstname`, `lastname`, `mail`, and `mobile`.
 
 ## Kerberos SSO on Linux
 
@@ -80,7 +82,7 @@ ldaplist -h ldap.example.com -M example.com -p -s -g -u
 
 ## OU and schema configuration
 
-Default search bases are `ou=People`, `ou=SUDOers`, `ou=Groups`, and `ou=automount`, each beneath the configured base DN.
+Searches run recursively below the discovered base DN by default. People matches POSIX accounts and AD user objects; Groups matches POSIX groups and AD groups; SUDOers and automount match their respective schema object classes. Directory layouts and schemas vary, so use the existing `LDAPLIST_*_OU` overrides when you need to limit a search to a subtree.
 
 Environment overrides:
 - `LDAPLIST_BASE_DN`, `LDAPLIST_DOMAIN`, `LDAPURI`
@@ -88,7 +90,7 @@ Environment overrides:
 
 OU override values are relative RDNs such as `ou=UnixUsers`. Set `LDAPLIST_BASE_DN=dc=example,dc=com` or use `-M example.com`.
 
-Profiles are key/value files at `/etc/ldaplist/profiles/NAME.conf`. Supported keys: `server`, `port`, `domain`, `base_dn`, `auth`, `bind_dn`, and `ca_file`. Restrict profile and password-file permissions.
+Profiles are optional key/value files at `/etc/ldaplist/profiles/NAME.conf`; they are not required for normal use. Supported keys: `server`, `port`, `domain`, `base_dn`, `auth`, `bind_dn`, and `ca_file`. Restrict profile and password-file permissions.
 
 ### OpenLDAP
 Common schemas: `inetOrgPerson` plus `posixAccount` for People, `posixGroup` for Groups, `sudoRole` for SUDOers, and `automountMap`/`automount` for automount maps.
