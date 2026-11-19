@@ -157,7 +157,7 @@ static void print_kind_table_row(LDAP *ld,LDAPMessage *e,int kind){
  if(kind==1){a=attr(ld,e,"cn");b=attr(ld,e,"sudoUser");c=attr(ld,e,"sudoHost");d=attr(ld,e,"sudoCommand");printf("| %-24.24s | %-28.28s | %-28.28s | %-40.40s |\n",a,b,c,d);}
  else if(kind==2){a=attr(ld,e,"cn");b=attr(ld,e,"gidNumber");c=attr(ld,e,"memberUid");if(!*c){free(c);c=attr(ld,e,"member");}printf("| %-24.24s | %-12.12s | %-48.48s |\n",a,b,c);}
  else if(kind==3){a=attr(ld,e,"automountKey");b=attr(ld,e,"automountInformation");printf("| %-32.32s | %-64.64s |\n",a,b);}
- else {a=attr(ld,e,"cn");b=attr(ld,e,"msDS-PasswordSettingsPrecedence");c=attr(ld,e,"msDS-MinimumPasswordLength");printf("| %-32.32s | %-12.12s | %-24.24s |\n",a,b,c);}
+ else {a=attr(ld,e,"cn");b=attr(ld,e,"msDS-PasswordSettingsPrecedence");c=attr(ld,e,"msDS-MinimumPasswordLength");if(!*c){free(c);c=attr(ld,e,"pwdMinLength");}printf("| %-32.32s | %-12.12s | %-24.24s |\n",a,b,c);}
  free(a);free(b);free(c);free(d);
 }
 static void print_entry(LDAP *ld,LDAPMessage *e,int kind,int table);
@@ -237,8 +237,6 @@ int main(int argc,char **argv){
  if(kinds[i]==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}
  else {if(o.table)table_header_kind(kinds[i]); for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)) {
  if(kinds[i]==4){
-  char *entrydn=ldap_get_dn(ld,e);puts(entrydn?entrydn:"");if(entrydn)ldap_memfree(entrydn);
-  const char *attrs[]={"cn","pwdAttribute","pwdMinAge","pwdMaxAge","pwdInHistory","pwdCheckQuality","pwdMinLength","pwdExpireWarning","pwdGraceAuthNLimit","pwdLockout","pwdLockoutDuration","pwdMaxFailure","pwdFailureCountInterval","pwdMustChange","pwdAllowUserChange","pwdSafeModify","msDS-PasswordSettingsPrecedence","msDS-PasswordReversibleEncryptionEnabled","msDS-PasswordHistoryLength","msDS-PasswordComplexityEnabled","msDS-MinimumPasswordLength","msDS-MinimumPasswordAge","msDS-MaximumPasswordAge","msDS-LockoutThreshold","msDS-LockoutDuration","msDS-LockoutObservationWindow",NULL};
   if(o.table)print_kind_table_row(ld,e,4);else print_long_entry(ld,e);
  }else print_entry(ld,e,kinds[i],o.table);
  }}ldap_msgfree(res);}
