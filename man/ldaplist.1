@@ -20,13 +20,15 @@ ldaplist \- list entries from OpenLDAP and Active Directory
 A read-only LDAP directory listing utility written in C. Supports LDAPv3, OpenLDAP, Active Directory, simple binds, and Kerberos/GSSAPI.
 .PP
 With no arguments, ldaplist automatically discovers usable directory settings and displays the People table. Explicit command-line settings can be used when discovery needs to be overridden. Searches normally run recursively below the discovered base DN and use LDAP object-class filters rather than requiring fixed People or Groups containers.
+.PP
+Entries located beneath any OU whose name is "terminated" are excluded from all results, regardless of the selected database or listing mode. The OU name comparison is case-insensitive. This includes detailed output requested with -l.
 .SH OPTIONS
 .TP
 .B -d
 Enable LDAP library diagnostics.
 .TP
 .B -l
-Display the full distinguished name and every LDAP attribute returned for each entry. For example, use ldaplist -l passwd username. Multi-valued attributes are printed on separate lines.
+Display the full distinguished name and every LDAP attribute returned for each entry. For example, use ldaplist -l passwd username. Multi-valued attributes are printed on separate lines. Entries beneath an OU named terminated remain excluded.
 .TP
 .B -v
 Verbose connection diagnostics.
@@ -81,6 +83,8 @@ Selectors may be combined. A positional database and optional key may also be su
 Normal listings use fixed-width, pipe-delimited tables. The default People table columns are uid, firstname, lastname, mail, and mobile. Group output includes group name, gidNumber, and members. The exact attributes available depend on the directory schema and the LDAP access controls.
 .PP
 Use -l with a positional database and key, such as 'ldaplist -l passwd andrew', to display the entry DN followed by all attributes returned by the LDAP server, one attribute value per line. This detailed output is intended for inspecting the complete visible LDAP entry; it is not formatted as a table.
+.SH EXCLUSIONS
+Entries whose DN contains an OU RDN named terminated are filtered from every result set. The comparison is case-insensitive and applies at any depth beneath the search base. This applies to People, Groups, SUDOers, automount maps, password policies, and positional database/key searches, including -l output. Entries in other containers are not excluded merely because another attribute contains the word "terminated".
 .SH AUTHENTICATION
 Kerberos/GSSAPI is the default. Acquire a ticket with kinit; the current credential cache is used automatically. For simple bind, use -D with -W to prompt without echoing the password. Simple binds should use LDAPS and trusted CA validation. ldaplist does not extract credentials from private SSSD databases.
 .SH AUTOMATIC DISCOVERY
