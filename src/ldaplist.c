@@ -18,7 +18,7 @@
 #include <arpa/nameser.h>
 
 #define VERSION "1.0.0"
-typedef struct { const char *host,*domain,*profile,*auth,*cert,*dn,*pw,*pwfile,*base; int port,debug,verbose,table,p,s,g,u,y; } Opt;
+typedef struct { const char *host,*domain,*profile,*auth,*cert,*dn,*pw,*pwfile,*base; int port,debug,verbose,table,long_output,p,s,g,u,y; } Opt;
 static void usage(FILE *f) {
  fprintf(f,"ldaplist %s\nUsage: ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword|-W|-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]\n\n-d debug  -l classic output  -v verbose  -h server[:port]  -M domain/base DN\n-N profile  -a kerberos(default)|simple|gssapi|anonymous  -P CA file/dir  -D bind DN\n-w password  -W prompt for password  -j password file  -t People table  -p People  -s SUDOers  -g Groups  -u automount  -y password policies\n-V version  -? help\n",VERSION);
 }
@@ -138,6 +138,28 @@ static char *attr(LDAP *ld,LDAPMessage *e,const char *a){
 }
 static void table_header(void){ printf("| %-12s | %-16s | %-20s | %-32s | %-16s |\n","uid","firstname","lastname","mail","mobile"); puts("|--------------|------------------|----------------------|----------------------------------|------------------|"); }
 static void table_row(const char *uid,const char *gn,const char *sn,const char *mail,const char *mob){ printf("| %-12.12s | %-16.16s | %-20.20s | %-32.32s | %-16.16s |\n",uid,gn,sn,mail,mob); }
+static void table_header_kind(int kind){
+ if(kind==1)puts("| name                     | users                        | hosts                        | commands                                  |");
+ else if(kind==2)puts("| group                    | gidNumber    | members                                          |");
+ else if(kind==3)puts("| automountKey                     | automountInformation                                               |");
+ else puts("| policy                           | precedence   | minimumLength             |");
+}
+static void print_long_entry(LDAP *ld,LDAPMessage *e){
+ char *dn=ldap_get_dn(ld,e);printf("dn: %s\\n",dn?dn:"");if(dn)ldap_memfree(dn);
+ BerElement *ber=NULL;for(char *name=ldap_first_attribute(ld,e,&ber);name;name=ldap_next_attribute(ld,e,ber)){
+  struct berval **vals=ldap_get_values_len(ld,e,name);
+  if(vals){for(int i=0;vals[i];i++)printf("%s: %.*s\\n",name,(int)vals[i]->bv_len,vals[i]->bv_val);ldap_value_free_len(vals);}
+  ldap_memfree(name);
+ }if(ber)ber_free(ber,0);
+}
+static void print_kind_table_row(LDAP *ld,LDAPMessage *e,int kind){
+ char *a=NULL,*b=NULL,*c=NULL,*d=NULL;
+ if(kind==1){a=attr(ld,e,"cn");b=attr(ld,e,"sudoUser");c=attr(ld,e,"sudoHost");d=attr(ld,e,"sudoCommand");printf("| %-24.24s | %-28.28s | %-28.28s | %-40.40s |\\n",a,b,c,d);}
+ else if(kind==2){a=attr(ld,e,"cn");b=attr(ld,e,"gidNumber");c=attr(ld,e,"memberUid");if(!*c){free(c);c=attr(ld,e,"member");}printf("| %-24.24s | %-12.12s | %-48.48s |\\n",a,b,c);}
+ else if(kind==3){a=attr(ld,e,"automountKey");b=attr(ld,e,"automountInformation");printf("| %-32.32s | %-64.64s |\\n",a,b);}
+ else {a=attr(ld,e,"cn");b=attr(ld,e,"msDS-PasswordSettingsPrecedence");c=attr(ld,e,"msDS-MinimumPasswordLength");printf("| %-32.32s | %-12.12s | %-24.24s |\\n",a,b,c);}
+ free(a);free(b);free(c);free(d);
+}
 static void print_entry(LDAP *ld,LDAPMessage *e,int kind,int table);
 static LDAP *sort_ld;
 static int uid_compare(const void *ap,const void *bp){
@@ -154,14 +176,18 @@ static void print_people_sorted(LDAP *ld,LDAPMessage *res,int table){
   entries[n++]=e;
  }
  sort_ld=ld;qsort(entries,n,sizeof(*entries),uid_compare);
- for(size_t i=0;i<n;i++)print_entry(ld,entries[i],0,table);
+ for(size_t i=0;i<n;i++){
+  if(i){char *prev=attr(ld,entries[i-1],"uid"),*cur=attr(ld,entries[i],"uid");int duplicate=!strcasecmp(prev,cur);free(prev);free(cur);if(duplicate)continue;}
+  print_entry(ld,entries[i],0,table);
+ }
  free(entries);
 }
 static void print_entry(LDAP *ld,LDAPMessage *e,int kind,int table){
  char *uid=attr(ld,e,"uid"),*gn=attr(ld,e,"givenName"),*sn=attr(ld,e,"sn"),*mail=attr(ld,e,"mail"),*mob=attr(ld,e,"mobile");
  if(kind==0&&table){if(*uid)table_row(uid,gn,sn,mail,mob);}
  else if(kind==0){char *un=attr(ld,e,"uidNumber"),*gnn=attr(ld,e,"gidNumber"),*gecos=attr(ld,e,"gecos"),*home=attr(ld,e,"homeDirectory"),*shell=attr(ld,e,"loginShell");printf("%s:%s:%s:%s:%s:%s\n",uid,un,gnn,*gecos?gecos:gn,home,shell);free(un);free(gnn);free(gecos);free(home);free(shell);}
- else {char *dn=ldap_get_dn(ld,e);puts(dn?dn:"");if(kind==1){char *x=attr(ld,e,"sudoUser");if(*x)printf("  sudoUser: %s\n",x);free(x);}if(kind==2){char *x=attr(ld,e,"memberUid");if(*x)printf("  memberUid: %s\n",x);free(x);}if(kind==3){char *k=attr(ld,e,"automountKey"),*v=attr(ld,e,"automountInformation");printf("%s %s\n",k,v);free(k);free(v);}if(dn)ldap_memfree(dn);}
+ else if(table)print_kind_table_row(ld,e,kind);
+ else print_long_entry(ld,e);
  free(uid);free(gn);free(sn);free(mail);free(mob);
 }
 static void esc_filter(const char *in,char *out,size_t n){
@@ -170,9 +196,9 @@ static void esc_filter(const char *in,char *out,size_t n){
 int main(int argc,char **argv){
  Opt o={.port=389,.auth="kerberos"};int c,auth_explicit=0,prompt_pw=0,pw_owned=0;
  while((c=getopt(argc,argv,"dlvh:M:N:a:P:D:w:Wj:tpsguyV?"))!=-1)switch(c){
- case 'd':o.debug=1;break;case 'l':break;case 'v':o.verbose=1;break;case 'h':o.host=optarg;break;case 'M':o.domain=optarg;break;case 'N':o.profile=optarg;break;case 'a':o.auth=optarg;auth_explicit=1;break;case 'P':o.cert=optarg;break;case 'D':o.dn=optarg;break;case 'w':o.pw=optarg;break;case 'W':prompt_pw=1;break;case 'j':o.pwfile=optarg;break;case 't':o.table=1;break;case 'p':o.p=1;break;case 's':o.s=1;break;case 'g':o.g=1;break;case 'u':o.u=1;break;case 'y':o.y=1;break;case 'V':puts("ldaplist " VERSION);return 0;default:usage(c=='?'?stdout:stderr);return c=='?'?0:2;}
+ case 'd':o.debug=1;break;case 'l':o.long_output=1;break;case 'v':o.verbose=1;break;case 'h':o.host=optarg;break;case 'M':o.domain=optarg;break;case 'N':o.profile=optarg;break;case 'a':o.auth=optarg;auth_explicit=1;break;case 'P':o.cert=optarg;break;case 'D':o.dn=optarg;break;case 'w':o.pw=optarg;break;case 'W':prompt_pw=1;break;case 'j':o.pwfile=optarg;break;case 't':o.table=1;break;case 'p':o.p=1;break;case 's':o.s=1;break;case 'g':o.g=1;break;case 'u':o.u=1;break;case 'y':o.y=1;break;case 'V':puts("ldaplist " VERSION);return 0;default:usage(c=='?'?stdout:stderr);return c=='?'?0:2;}
  profile(o.profile,&o);
- discover_defaults(&o);
+ discover_defaults(&o);\n if(!o.long_output)o.table=1;
  if(prompt_pw){
   if(auth_explicit && strcasecmp(o.auth,"simple") && strcasecmp(o.auth,"bind")){
    fputs("ldaplist: -W cannot be combined with a non-simple -a method\n",stderr);return 2;
@@ -203,23 +229,23 @@ int main(int argc,char **argv){
  else {fprintf(stderr,"unsupported auth method: %s\n",o.auth);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"LDAP authentication failed: %s\n",ldap_err2string(rc));ldap_unbind_ext_s(ld,NULL,NULL);return 1;}
  if(o.verbose)fprintf(stderr,"Connected to %s; base DN %s; auth %s\n",uri,base,o.auth);
- const char *ous[]={"","","","",""};const char *envs[]={"LDAPLIST_PEOPLE_OU","LDAPLIST_SUDOERS_OU","LDAPLIST_GROUPS_OU","LDAPLIST_AUTOMOUNT_OU","LDAPLIST_POLICIES_OU"};int kinds[]={0,1,2,3,4};int flags[]={o.p,o.s,o.g,o.u,o.y};int selected=o.p||o.s||o.g||o.u||o.y,err=0;
+ const char *ous[]={"","","","",""};const char *envs[]={"LDAPLIST_PEOPLE_OU","LDAPLIST_SUDOERS_OU","LDAPLIST_GROUPS_OU","LDAPLIST_AUTOMOUNT_OU","LDAPLIST_POLICIES_OU"};int kinds[]={0,1,2,3,4};int flags[]={o.p,o.s,o.g,o.u,o.y};int selected=o.p||o.s||o.g||o.u||o.y,err=0;\n if(!selected&&optind>=argc){o.p=1;flags[0]=1;selected=1;}
  for(int i=0;i<5;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);make_search_dn(dn,sizeof(dn),base,ou&&*ou?ou:ous[i]);LDAPMessage *res=NULL;
  rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,search_filter(i),NULL,0,NULL,NULL,&tv,0,&res);
  if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}if(i==0&&o.table)table_header();
  if(kinds[i]==0){print_people_sorted(ld,res,o.table);}
- else for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)) {
+ else {if(o.table)table_header_kind(kinds[i]); for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)) {
  if(kinds[i]==4){
   char *entrydn=ldap_get_dn(ld,e);puts(entrydn?entrydn:"");if(entrydn)ldap_memfree(entrydn);
   const char *attrs[]={"cn","pwdAttribute","pwdMinAge","pwdMaxAge","pwdInHistory","pwdCheckQuality","pwdMinLength","pwdExpireWarning","pwdGraceAuthNLimit","pwdLockout","pwdLockoutDuration","pwdMaxFailure","pwdFailureCountInterval","pwdMustChange","pwdAllowUserChange","pwdSafeModify","msDS-PasswordSettingsPrecedence","msDS-PasswordReversibleEncryptionEnabled","msDS-PasswordHistoryLength","msDS-PasswordComplexityEnabled","msDS-MinimumPasswordLength","msDS-MinimumPasswordAge","msDS-MaximumPasswordAge","msDS-LockoutThreshold","msDS-LockoutDuration","msDS-LockoutObservationWindow",NULL};
   for(int ai=0;attrs[ai];ai++){char *v=attr(ld,e,attrs[ai]);if(*v)printf("  %s: %s\n",attrs[ai],v);free(v);}
  }else print_entry(ld,e,kinds[i],o.table);
- }ldap_msgfree(res);}
+ }}ldap_msgfree(res);}
  if(!selected){if(optind>=argc){usage(stderr);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}const char *db=argv[optind++];int k=-1;const char *ou=NULL,*a="cn";
  if(!strcasecmp(db,"passwd")||!strcasecmp(db,"people")){k=0;ou=ous[0];a="uid";}else if(!strcasecmp(db,"sudoers")){k=1;ou=ous[1];}else if(!strcasecmp(db,"group")||!strcasecmp(db,"groups")){k=2;ou=ous[2];}else if(!strcasecmp(db,"automount")){k=3;ou=ous[3];a="automountKey";}
  if(k<0){fprintf(stderr,"unsupported database: %s\n",db);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  char dn[2300],filter[8192];const char *dbou=getenv(k==0?"LDAPLIST_PEOPLE_OU":k==1?"LDAPLIST_SUDOERS_OU":k==2?"LDAPLIST_GROUPS_OU":"LDAPLIST_AUTOMOUNT_OU");make_search_dn(dn,sizeof(dn),base,dbou&&*dbou?dbou:ou);
  if(optind<argc){size_t used=(size_t)snprintf(filter,sizeof(filter),"(|");for(;optind<argc;optind++){char x[2048];esc_filter(argv[optind],x,sizeof(x));int z=snprintf(filter+used,sizeof(filter)-used,"(%s=%s)",a,x);if(z>0&&(size_t)z<sizeof(filter)-used)used+=(size_t)z;}snprintf(filter+used,sizeof(filter)-used,")");}else snprintf(filter,sizeof(filter),"%s",search_filter(k));
- LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)table_header();if(k==0)print_people_sorted(ld,res,o.table);else for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,k,o.table);ldap_msgfree(res);}}
+ LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)table_header();if(k==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}else {if(o.table)table_header_kind(k);for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))print_entry(ld,e,k,o.table);}ldap_msgfree(res);}}
  ldap_unbind_ext_s(ld,NULL,NULL);if((o.pwfile||pw_owned)&&o.pw){memset((char*)o.pw,0,strlen(o.pw));free((char*)o.pw);}return err?1:0;
 }
