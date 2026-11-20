@@ -159,7 +159,10 @@ static void table_header(void){
  for(int i=0;i<5;i++)if(people_widths[i]<strlen(names[i]))people_widths[i]=strlen(names[i]);
  for(int i=0;i<5;i++)printf("| %-*s ",(int)people_widths[i],names[i]);
  puts("|");
- for(int i=0;i<5;i++)printf("|%.*s",(int)people_widths[i]+2,"------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+ for(int i=0;i<5;i++){
+  putchar('|');
+  for(size_t j=0;j<people_widths[i]+2;j++)putchar('-');
+ }
  puts("|");
 }
 static void table_row(const char *uid,const char *gn,const char *sn,const char *mail,const char *mob){
