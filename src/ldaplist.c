@@ -153,8 +153,20 @@ static char *attr(LDAP *ld,LDAPMessage *e,const char *a){
  struct berval **v=ldap_get_values_len(ld,e,a);char *s=(v&&v[0])?strndup(v[0]->bv_val,v[0]->bv_len):strdup("");if(v)ldap_value_free_len(v);
  if(!*s&&!strcasecmp(a,"uid")){free(s);v=ldap_get_values_len(ld,e,"sAMAccountName");s=(v&&v[0])?strndup(v[0]->bv_val,v[0]->bv_len):strdup("");if(v)ldap_value_free_len(v);}return s;
 }
-static void table_header(void){ printf("| %-12s | %-16s | %-20s | %-32s | %-16s |\n","uid","firstname","lastname","mail","mobile"); puts("|--------------|------------------|----------------------|----------------------------------|------------------|"); }
-static void table_row(const char *uid,const char *gn,const char *sn,const char *mail,const char *mob){ printf("| %-12.12s | %-16.16s | %-20.20s | %-32.32s | %-16.16s |\n",uid,gn,sn,mail,mob); }
+static size_t people_widths[5]={12,16,20,32,16};
+static void table_header(void){
+ const char *names[]={"uid","firstname","lastname","mail","mobile"};
+ for(int i=0;i<5;i++)if(people_widths[i]<strlen(names[i]))people_widths[i]=strlen(names[i]);
+ for(int i=0;i<5;i++)printf("| %-*s ",(int)people_widths[i],names[i]);
+ puts("|");
+ for(int i=0;i<5;i++)printf("|-%.*s-",(int)people_widths[i]+2,"------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+ puts("|");
+}
+static void table_row(const char *uid,const char *gn,const char *sn,const char *mail,const char *mob){
+ const char *v[]={uid,gn,sn,mail,mob};
+ for(int i=0;i<5;i++)printf("| %-*s ",(int)people_widths[i],v[i]);
+ puts("|");
+}
 static void table_header_kind(int kind){
  if(kind==1)puts("| name                     | users                        | hosts                        | commands                                  |");
  else if(kind==2)puts("| group                    | gidNumber    | members                                          |");
@@ -186,25 +198,35 @@ static int uid_compare(const void *ap,const void *bp){
 }
 static void print_people_sorted(LDAP *ld,LDAPMessage *res,int table){
  size_t n=0,cap=32;LDAPMessage **entries=malloc(cap*sizeof(*entries));
+ const size_t defaults[]={12,16,20,32,16};
+ for(int i=0;i<5;i++)people_widths[i]=defaults[i];
+ for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
+  if(is_terminated_dn(ld,e))continue;
+  char *v[]={attr(ld,e,"uid"),attr(ld,e,"givenName"),attr(ld,e,"sn"),attr(ld,e,"mail"),attr(ld,e,"mobile")};
+  for(int j=0;j<5;j++){size_t z=strlen(v[j]);if(z>people_widths[j])people_widths[j]=z;free(v[j]);}
+ }
+ if(table)table_header();
  if(!entries){
-  for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))
-   if(!is_terminated_dn(ld,e))print_entry(ld,e,0,table);
+  for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
+   if(is_terminated_dn(ld,e))continue;
+   char *uid=attr(ld,e,"uid");int is_user=*uid!='\\0';free(uid);
+   if(is_user)print_entry(ld,e,0,table);
+  }
   return;
  }
  for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
   if(is_terminated_dn(ld,e))continue;
-  char *uid=attr(ld,e,"uid");int is_user=*uid!='\0';free(uid);if(!is_user)continue;
-  if(n==cap){
-   cap*=2;LDAPMessage **tmp=realloc(entries,cap*sizeof(*entries));
-   if(!tmp){
-    free(entries);
-    for(LDAPMessage *x=ldap_first_entry(ld,res);x;x=ldap_next_entry(ld,x))
-     if(!is_terminated_dn(ld,x))print_entry(ld,x,0,table);
-    return;
-   }
-   entries=tmp;
-  }
+  char *uid=attr(ld,e,"uid");int is_user=*uid!='\\0';free(uid);if(!is_user)continue;
+  if(n==cap){cap*=2;LDAPMessage **tmp=realloc(entries,cap*sizeof(*entries));if(!tmp){free(entries);entries=NULL;break;}entries=tmp;}
   entries[n++]=e;
+ }
+ if(!entries){
+  for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)){
+   if(is_terminated_dn(ld,e))continue;
+   char *uid=attr(ld,e,"uid");int is_user=*uid!='\\0';free(uid);
+   if(is_user)print_entry(ld,e,0,table);
+  }
+  return;
  }
  sort_ld=ld;qsort(entries,n,sizeof(*entries),uid_compare);
  for(size_t i=0;i<n;i++){
@@ -265,7 +287,7 @@ int main(int argc,char **argv){
  if(!selected&&optind>=argc){o.p=1;flags[0]=1;selected=1;}
  for(int i=0;i<5;i++)if(flags[i]){char dn[2300];const char *ou=getenv(envs[i]);make_search_dn(dn,sizeof(dn),base,ou&&*ou?ou:ous[i]);LDAPMessage *res=NULL;
  rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,search_filter(i),NULL,0,NULL,NULL,&tv,0,&res);
- if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}if(i==0&&o.table)table_header();
+ if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search %s: %s\n",dn,ldap_err2string(rc));err=1;continue;}
  if(kinds[i]==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}
  else {if(o.table)table_header_kind(kinds[i]); for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e)) {
  if(is_terminated_dn(ld,e))continue;
@@ -278,6 +300,6 @@ int main(int argc,char **argv){
  if(k<0){fprintf(stderr,"unsupported database: %s\n",db);ldap_unbind_ext_s(ld,NULL,NULL);return 2;}
  char dn[2300],filter[8192];const char *dbou=getenv(k==0?"LDAPLIST_PEOPLE_OU":k==1?"LDAPLIST_SUDOERS_OU":k==2?"LDAPLIST_GROUPS_OU":"LDAPLIST_AUTOMOUNT_OU");make_search_dn(dn,sizeof(dn),base,dbou&&*dbou?dbou:ou);
  if(optind<argc){size_t used=(size_t)snprintf(filter,sizeof(filter),"(|");for(;optind<argc;optind++){char x[2048];esc_filter(argv[optind],x,sizeof(x));int z=snprintf(filter+used,sizeof(filter)-used,"(%s=%s)",a,x);if(z>0&&(size_t)z<sizeof(filter)-used)used+=(size_t)z;}snprintf(filter+used,sizeof(filter)-used,")");}else snprintf(filter,sizeof(filter),"%s",search_filter(k));
- LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0&&o.table)table_header();if(k==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}else {if(o.table)table_header_kind(k);for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_entry(ld,e,k,o.table);}ldap_msgfree(res);}}
+ LDAPMessage *res=NULL;rc=ldap_search_ext_s(ld,dn,LDAP_SCOPE_SUBTREE,filter,NULL,0,NULL,NULL,&tv,0,&res);if(rc!=LDAP_SUCCESS){fprintf(stderr,"Search failed: %s\n",ldap_err2string(rc));err=1;}else{if(k==0){if(o.long_output){for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_long_entry(ld,e);}else print_people_sorted(ld,res,o.table);}else {if(o.table)table_header_kind(k);for(LDAPMessage *e=ldap_first_entry(ld,res);e;e=ldap_next_entry(ld,e))if(!is_terminated_dn(ld,e))print_entry(ld,e,k,o.table);}ldap_msgfree(res);}}
  ldap_unbind_ext_s(ld,NULL,NULL);if((o.pwfile||pw_owned)&&o.pw){memset((char*)o.pw,0,strlen(o.pw));free((char*)o.pw);}return err?1:0;
 }
