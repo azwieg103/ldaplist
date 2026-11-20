@@ -1,128 +1,304 @@
 # ldaplist
 
-A C-based open-source LDAP listing utility for Linux. This project implements a Solaris-style `ldaplist` interface for OpenLDAP and Microsoft Active Directory.
+A read-only, C-based LDAP directory listing utility for Linux. `ldaplist` provides a Solaris-style command-line interface for querying OpenLDAP and Microsoft Active Directory.
 
-**Initial release status:** command-line client, OU search paths, authentication integration, Makefile, RPM packaging, and GitHub Actions release automation are included. Test against a non-production directory before production deployment; AD schemas and OU layouts vary.
+The client uses OpenLDAP `libldap` directly; it does not shell out to `ldapsearch`.
 
 ## Features
-- C implementation using OpenLDAP `libldap` (no shelling out to ldapsearch).
-- LDAPv3; LDAP and LDAPS URIs.
-- Kerberos/GSSAPI SSO by default, using the workstation credential cache; simple bind remains available with `-W`, `-w`, or `-j`.
-- Unprivileged automatic discovery from readable OpenLDAP client configuration, readable SSSD domain settings, Kerberos realm configuration, host DNS domain, and LDAP DNS SRV records.
-- Searches discover directory objects below the base DN rather than assuming every directory uses Unix-specific `ou=People` and `ou=Groups` containers.
-- **Entries located anywhere beneath an OU whose name is `terminated` are excluded from all listing and keyed lookup results.** The exclusion applies to People, Groups, SUDOers, automount, password policies, and detailed `-l` output.
-- Password file support (`-j`); prefer it over `-w`.
-- Independent OU selectors: People, SUDOers, Groups, automount.
-- Pipe-delimited tables by default for People, Groups, SUDOers, automount maps, and password policies.
-- `ldaplist` with no arguments defaults to the People table; `-l database key` displays the full DN and all returned LDAP attributes.
-- AlmaLinux 10 x86_64 RPM and source RPM, published as GitHub Releases after successful CI.
 
-## Syntax
+- LDAPv3 connections over LDAP or LDAPS.
+- Kerberos/GSSAPI authentication by default, using the current Kerberos credential cache.
+- Optional simple bind, anonymous bind, and password-file authentication.
+- Automatic discovery of LDAP settings from readable OpenLDAP client configuration, readable SSSD domain settings, Kerberos realm configuration, the host DNS domain, and LDAP DNS SRV records.
+- Recursive searches below the discovered LDAP base DN; no fixed `ou=People` or `ou=Groups` layout is required.
+- POSIX LDAP and common Active Directory object-class filters.
+- People, SUDOers, Groups, automount, and password-policy listings.
+- Keyed database lookups and detailed LDAP entry output.
+- People results sorted by UID, case-insensitively, with duplicate UIDs suppressed.
+- People table columns sized to the longest value in each result set. Header, separator, and every row share the same column boundaries; values are not truncated.
+- Entries beneath any OU named `terminated` are excluded from listings and keyed lookups, at any depth and regardless of case.
+- Optional named connection profiles; normal use does not require creating a configuration file.
+- AlmaLinux 10 x86_64 RPM and source RPM releases published through GitHub Actions.
 
-```text
-ldaplist [-dlv] [-h LDAP_server[:serverPort]] [-M domainName] [-N profileName] [-a authenticationMethod] [-P certifPath] [-D bindDN] [-w bindPassword] [-W] [-j passwdFile] [-t] [-p|-s|-g|-u|-y] [database [key]...]
+## Quick start
+
+If the workstation already has a valid Kerberos ticket and LDAP discovery is configured:
+
+```bash
+klist
+ldaplist
 ```
 
-| Option | Meaning |
+With explicit server and domain settings:
+
+```bash
+kinit user@EXAMPLE.COM
+ldaplist -h ldap.example.com -M example.com
+```
+
+With no arguments, `ldaplist` displays the People table.
+
+## Command syntax
+
+```text
+ldaplist [-dlv] [-h server[:port]] [-M domainName] [-N profileName]
+         [-a authenticationMethod] [-P certifPath] [-D bindDN]
+         [-w bindPassword|-W|-j passwdFile] [-t]
+         [-p|-s|-g|-u|-y] [database [key]...]
+```
+
+### Options
+
+| Option | Description |
 |---|---|
-| `-d` | LDAP library diagnostics |
-| `-l` | Long/detail output: DN followed by every returned LDAP attribute |
-| `-v` | Verbose connection and search diagnostics |
-| `-h` | LDAP host, optionally with port; 636 selects LDAPS |
-| `-M` | DNS domain (converted to a base DN) or explicit base DN |
-| `-N` | Named profile in `/etc/ldaplist/profiles/NAME.conf` |
-| `-a` | `kerberos` (default), `simple`, `bind`, `anonymous`, or `gssapi` |
-| `-P` | CA certificate file or directory; verification is required |
-| `-D` | Bind DN |
-| `-w` | Bind password (visible in process arguments; avoid when possible) |
-| `-W` | Prompt for a bind password without echoing it; selects simple bind unless `-a` was explicitly supplied |
-| `-j` | Read password from first line of a file |
-| `-t` | Table output (now the default; retained for compatibility) |
-| `-p` | Search People |
-| `-s` | Search SUDOers |
-| `-g` | Search Groups |
-| `-u` | Search automount maps |
-| `-V` | Version; `-?` help |
+| `-d` | Enable LDAP library diagnostics. |
+| `-l` | Display detailed output: the entry DN and all attributes returned by the directory. |
+| `-v` | Print connection and search diagnostics. |
+| `-h server[:port]` | LDAP server or LDAP URI. Port 636 selects LDAPS when a host and port are supplied. |
+| `-M domainName` | DNS domain (converted to a base DN) or explicit base DN such as `dc=example,dc=com`. |
+| `-N profileName` | Load an optional profile from `/etc/ldaplist/profiles/NAME.conf`. |
+| `-a method` | Authentication: `kerberos` (default), `gssapi`, `simple`, `bind`, or `anonymous`. |
+| `-P certifPath` | CA certificate file or directory used for certificate verification. |
+| `-D bindDN` | Bind distinguished name for simple authentication. |
+| `-w password` | Supply a bind password as an argument. Avoid where possible because arguments may be visible to other local users or saved in shell history. |
+| `-W` | Prompt for a password without echoing it. Selects simple bind unless an authentication method was explicitly supplied. |
+| `-j passwdFile` | Read the password from the first line of a file. Protect the file with restrictive permissions. |
+| `-t` | Request table output. Table output is already the default; this option remains for compatibility. |
+| `-p` | List People. |
+| `-s` | List SUDOers. |
+| `-g` | List Groups. |
+| `-u` | List automount maps. |
+| `-y` | List password-policy entries. |
+| `-V` | Print the program version. |
+| `-?` | Display command help. |
 
-With no selector or positional database, `ldaplist` displays the People table. The `-p`, `-g`, `-s`, `-u`, and `-y` selectors display pipe-delimited tables; selectors can be combined. `-t` remains accepted as a compatibility flag but is no longer required. Use `-l passwd USER` (or `-l people USER`) for the full LDAP entry: its DN and all attributes returned by the directory, one attribute per line. The directory's access controls determine which attributes are visible. By default, searches run below the discovered base DN and filter for matching object classes. Entries in any subtree beneath an OU named `terminated` are always excluded. Set an `LDAPLIST_*_OU` environment variable to further restrict a search to a particular subtree. The People table columns are `uid`, `firstname`, `lastname`, `mail`, and `mobile`.
+The listing selectors can be combined. If no selector or positional database is supplied, People is selected by default. The People table contains `uid`, `firstname`, `lastname`, `mail`, and `mobile`.
 
-## Kerberos SSO on Linux
+## Examples
 
-Use the workstation's existing Kerberos credentials:
+### People
+
+```bash
+# Default People listing
+ldaplist
+
+# List People explicitly
+ldaplist -p
+
+# Look up one user and display the complete LDAP entry
+ldaplist -l passwd alice
+
+# Keyed passwd lookup form
+ldaplist passwd -u alice -l
+```
+
+The detailed form prints the full distinguished name followed by every attribute and value returned by the LDAP server. Multi-valued attributes appear on separate lines. The directory's access controls determine which attributes are visible.
+
+### Other databases
+
+```bash
+# SUDOers
+ldaplist -s
+
+# Groups
+ldaplist -g
+
+# Automount maps
+ldaplist -u
+
+# Password policies
+ldaplist -y
+
+# Combine listing selectors
+ldaplist -p -s -g -u -y
+```
+
+### Explicit connection settings
+
+```bash
+ldaplist -h ldap.example.com -M example.com -p
+ldaplist -h ldaps://ldap.example.com:636 -M dc=example,dc=com -g
+```
+
+### Simple bind
+
+Kerberos/GSSAPI is preferred for workstation SSO. For a simple bind, specify a bind DN and use `-W` to enter the password interactively:
+
+```bash
+ldaplist -h ldaps://ldap.example.com:636 -M example.com \
+  -D 'uid=reader,ou=People,dc=example,dc=com' -W -p
+```
+
+A password can also be read from a file:
+
+```bash
+chmod 600 "$HOME/.ldaplist.pass"
+ldaplist -h ldaps://ldap.example.com:636 -M example.com \
+  -D 'uid=reader,ou=People,dc=example,dc=com' \
+  -j "$HOME/.ldaplist.pass" -p
+```
+
+Use LDAPS and a trusted CA for simple binds. Avoid `-w` on shared systems because command-line arguments can be exposed through process inspection and shell history.
+
+## Authentication
+
+### Kerberos/GSSAPI (default)
+
+The default authentication method is Kerberos/GSSAPI. The program uses the current credential cache; it does not prompt for a password.
 
 ```bash
 kinit user@EXAMPLE.COM
 klist
-ldaplist -h ldap.example.com -M example.com -p
-ldaplist -h ldap.example.com -M example.com -a gssapi -p -t
-```
-
-Kerberos/GSSAPI is the default authentication method. The client uses SASL GSSAPI and the current credential cache, so no password prompt or `-a kerberos` is needed. The LDAP server must support GSSAPI. Use `-a simple -D 'bind DN' -W` for an interactive, no-echo password prompt. Supplying `-D` with `-W`, `-w`, or `-j` selects simple bind automatically unless `-a` was explicitly set. DNS, time synchronization, realm configuration, and service principals must be correct.
-
-## Simple bind
-
-```bash
-install -m 0600 /dev/null "$HOME/.ldaplist.pass"
-# Add the password securely with an editor.
-ldaplist -h dc1.example.com:636 -M example.com \
-  -D 'CN=LDAP Reader,OU=Service Accounts,DC=example,DC=com' -W -p
-```
-
-Use LDAPS and a trusted CA for simple binds. Do not use `-w` on shared systems: command-line arguments may be visible through process inspection and shell history.
-
-## Examples
-
-```bash
 ldaplist -h ldap.example.com -M example.com
-ldaplist -l passwd alice
-ldaplist passwd -u alice -l
-ldaplist -h ldap.example.com -M example.com -s
-ldaplist -h ldap.example.com -M example.com -g
-ldaplist -h ldap.example.com -M example.com -u
-ldaplist -h ldap.example.com -M example.com passwd jdoe
-ldaplist -h ldap.example.com -M example.com groups engineering
-ldaplist -h ldap.example.com -M example.com -p -s -g -u
 ```
 
-## OU and schema configuration
+The LDAP service must support SASL GSSAPI, and DNS, time synchronization, realm configuration, and service principals must be correct. The explicit `-a gssapi` method is also accepted.
 
-Searches run recursively below the discovered base DN by default. People matches POSIX accounts and AD user objects; Groups matches POSIX groups and AD groups; SUDOers and automount match their respective schema object classes. **Entries beneath any OU named `terminated` are excluded globally, regardless of which listing selector or keyed database lookup is used.** The OU name match is case-insensitive. **Current Groups output is limited to entries that have a `gidNumber` attribute** (the POSIX/RFC2307-style group view); groups without `gidNumber`, including some native AD groups, are omitted. The `members` column displays the member values returned by the directory. Directory layouts and schemas vary, so use the existing `LDAPLIST_*_OU` overrides when you need to limit a search to a subtree.
+### Simple bind
 
-Environment overrides:
-- `LDAPLIST_BASE_DN`, `LDAPLIST_DOMAIN`, `LDAPURI`
-- `LDAPLIST_PEOPLE_OU`, `LDAPLIST_SUDOERS_OU`, `LDAPLIST_GROUPS_OU`, `LDAPLIST_AUTOMOUNT_OU`
+Use `-D` with `-W`, `-w`, or `-j`. A password supplied through these options requires a bind DN. When `-W`, `-w`, or `-j` is used without an explicit `-a` option, simple bind is selected automatically.
 
-OU override values are relative RDNs such as `ou=UnixUsers`. Set `LDAPLIST_BASE_DN=dc=example,dc=com` or use `-M example.com`.
+### Anonymous bind
 
-Profiles are optional key/value files at `/etc/ldaplist/profiles/NAME.conf`; they are not required for normal use. Supported keys: `server`, `port`, `domain`, `base_dn`, `auth`, `bind_dn`, and `ca_file`. Restrict profile and password-file permissions.
+Use `-a anonymous` only when the directory permits anonymous searches.
 
-### OpenLDAP
-Common schemas: `inetOrgPerson` plus `posixAccount` for People, `posixGroup` for Groups, `sudoRole` for SUDOers, and `automountMap`/`automount` for automount maps.
+## Automatic discovery
 
-### Active Directory
-AD commonly uses `CN=Users` or custom OUs instead of these Unix-oriented OU names. Create matching OUs or configure the OU overrides. AD attributes `givenName`, `sn`, `mail`, and `mobile` are read directly. Classic passwd fields `uidNumber`, `gidNumber`, `homeDirectory`, and `loginShell` require RFC2307/Unix attributes or an equivalent schema mapping. Full AD `member` DN expansion and schema-specific output are future enhancements.
+When explicit settings are not supplied, ldaplist attempts to discover connection information from:
+
+1. `LDAPLIST_BASE_DN` and `LDAPLIST_DOMAIN` environment overrides.
+2. Readable `/etc/openldap/ldap.conf` and `/etc/ldap/ldap.conf` settings (`BASE`, `URI`, and `TLS_CACERT`).
+3. Readable SSSD domain settings in `/etc/sssd/sssd.conf` (`ldap_uri`, `ad_server`, `ldap_search_base`, `ad_domain`, and `ldap_tls_cacert`).
+4. The Kerberos `default_realm` in `/etc/krb5.conf`.
+5. The DNS suffix of the local hostname.
+6. LDAP DNS SRV records: first `_ldap._tcp.dc._msdcs.DOMAIN`, then `_ldap._tcp.DOMAIN`.
+
+SSSD configuration is often readable only by root. ldaplist uses it only when readable, does not read SSSD private databases or bind credentials, and does not require SSSD configuration to be accessible. Discovery is best-effort; use `-h` and `-M` to override it when necessary.
+
+## Search scope, schemas, and exclusions
+
+By default, searches run recursively below the discovered base DN. The utility does not assume that every directory has Unix-specific `ou=People` or `ou=Groups` containers.
+
+Default object-class filters:
+
+| Listing | LDAP filter |
+|---|---|
+| People | POSIX accounts or AD person/user objects |
+| SUDOers | `objectClass=sudoRole` |
+| Groups | POSIX groups or AD group objects |
+| Automount | `objectClass=automount` |
+| Password policies | OpenLDAP `pwdPolicy` or AD `msDS-PasswordSettings` |
+
+### Terminated OU exclusion
+
+Any entry whose distinguished name contains an OU RDN named `terminated` is excluded. The comparison is case-insensitive and applies at any depth, across People, Groups, SUDOers, automount, password policies, keyed database searches, and detailed `-l` output. The exclusion is based on the OU in the DN; another attribute containing the word `terminated` does not trigger it.
+
+### People attributes and sorting
+
+The People table reads `uid`, `givenName`, `sn`, `mail`, and `mobile`. If `uid` is empty, the client falls back to `sAMAccountName`, which supports common AD user entries. Results are sorted by UID without regard to case, and duplicate UIDs are suppressed.
+
+Each People table column expands to fit its longest value in the current result set. The header, separator, and all result rows use those same widths, so long email addresses or other values do not shift the following columns or get truncated.
+
+### Groups
+
+The current Groups listing includes entries with a `gidNumber` attribute. Native AD groups without `gidNumber` are not included in this POSIX-oriented group view. The members column displays member values returned by the directory.
+
+### OpenLDAP and Active Directory notes
+
+Common OpenLDAP schemas include `posixAccount` for People, `posixGroup` for Groups, `sudoRole` for SUDOers, and `automount` for automount maps.
+
+Active Directory commonly uses `CN=Users` or custom OU layouts rather than Unix-oriented People and Groups OUs. The People filter also matches AD person/user objects, and `sAMAccountName` is used as a fallback for `uid`. POSIX fields such as `uidNumber`, `gidNumber`, `homeDirectory`, and `loginShell` require the corresponding Unix/RFC2307 attributes to exist in the directory.
+
+## Configuration
+
+Configuration files are optional. A normal user can run ldaplist without creating an application-specific configuration file.
+
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `LDAPURI` | LDAP URI or server URI. |
+| `LDAPLIST_BASE_DN` | Explicit LDAP search base DN. |
+| `LDAPLIST_DOMAIN` | DNS domain used to derive the base DN. |
+| `LDAPLIST_PEOPLE_OU` | Optional subtree restriction for People searches. |
+| `LDAPLIST_SUDOERS_OU` | Optional subtree restriction for SUDOers searches. |
+| `LDAPLIST_GROUPS_OU` | Optional subtree restriction for Groups searches. |
+| `LDAPLIST_AUTOMOUNT_OU` | Optional subtree restriction for automount searches. |
+| `LDAPLIST_POLICIES_OU` | Optional subtree restriction for password-policy searches. |
+
+OU override values are relative RDNs, for example `ou=UnixUsers`. Without an OU override, the search uses the discovered base DN.
+
+### Named profiles
+
+Optional profiles are read from:
+
+```text
+/etc/ldaplist/profiles/NAME.conf
+```
+
+Supported keys are:
+
+```ini
+server=ldap.example.com
+port=636
+domain=example.com
+base_dn=dc=example,dc=com
+auth=kerberos
+bind_dn=uid=reader,ou=People,dc=example,dc=com
+ca_file=/etc/pki/tls/certs/ldap-ca.pem
+```
+
+Select a profile with `-N NAME`. Profiles are not required for normal use. Do not put plaintext passwords in profiles.
 
 ## Build from source (AlmaLinux 10)
 
+Install the build dependencies:
+
 ```bash
-sudo dnf install -y gcc make openldap-devel cyrus-sasl-devel krb5-devel pkgconf-pkg-config
+sudo dnf install -y gcc make openldap-devel cyrus-sasl-devel \
+  cyrus-sasl-gssapi krb5-devel pkgconf-pkg-config
+```
+
+Build, run the smoke checks, and install:
+
+```bash
 make
 make check
 sudo make install
 ```
 
-## RPM releases
+The Makefile installs the executable to `/usr/bin/ldaplist` and the manual page to `/usr/share/man/man1/ldaplist.1`.
 
-Pushes to `main` affecting source, packaging, scripts, or the workflow trigger an AlmaLinux 10 build. CI runs smoke tests, creates binary and source RPMs, and publishes a GitHub Release only after success. Release numbers follow `ZWIEGNET.N.el10`, incrementing for each build of a given version.
+## RPM packages and releases
 
-Primary target: AlmaLinux 10 x86_64. Intended EL10 compatibility includes RHEL, Rocky Linux, Oracle Linux, and CentOS Stream; those distributions are not individually tested.
+The primary build target is AlmaLinux 10 x86_64. GitHub Actions builds and tests the RPM, then publishes the binary RPM, source RPM, and debug RPMs as a GitHub Release when the workflow succeeds.
+
+- Repository: [github.com/azwieg103/ldaplist](https://github.com/azwieg103/ldaplist)
+- Releases: [Download RPM packages](https://github.com/azwieg103/ldaplist/releases)
+
+Install a downloaded RPM with:
+
+```bash
+sudo rpm -Uvh ldaplist-*.x86_64.rpm
+```
 
 ## Security
-- Prefer Kerberos/GSSAPI for workstation SSO.
+
+- Prefer Kerberos/GSSAPI for workstation authentication.
 - Use LDAPS and trusted CA validation for simple binds.
-- Password files should be mode 0600.
-- Run with least-privilege read-only directory credentials.
-- The utility performs LDAP searches only; it does not modify directory data.
+- Protect password files with mode `0600`.
+- Avoid putting passwords in command-line arguments.
+- Use least-privilege, read-only LDAP credentials.
+- ldaplist performs directory searches only; it does not modify LDAP entries.
+
+## Manual page
+
+After installation:
+
+```bash
+man ldaplist
+```
 
 ## License
-GNU General Public License version 2 only (GPL-2.0-only). See [LICENSE](LICENSE).
+
+GNU General Public License version 2 only (`GPL-2.0-only`). See [LICENSE](LICENSE).
